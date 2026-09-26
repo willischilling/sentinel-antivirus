@@ -118,6 +118,7 @@ header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, v
 .toast .t-actions .q { background: var(--accent); color: #fff; border-color: var(--accent); }
 .toast .t-actions .d { color: var(--bad); }
 .toast.warn { border-left-color: var(--warn); } .toast.warn .t-title { color: var(--warn); }
+.toast.good { border-left-color: var(--good); } .toast.good .t-title { color: var(--good); }
 .feed .toast { position: absolute; right: 16px; bottom: 16px; box-shadow: 0 18px 40px -12px rgba(0,0,0,.55); transform: translateY(calc(100% + 30px)); transition: transform .5s cubic-bezier(.2,.8,.2,1); }
 .feed .toast.show { transform: none; }
 
@@ -499,6 +500,7 @@ footer p { margin: 0; max-width: 70ch; }
       <ul class="ask-points">
         <li><b>Two minutes to set up</b><span>Make a free Proton account, download a WireGuard config, and import it. Sentinel installs WireGuard for you, but only after checking it's really signed by WireGuard LLC.</span></li>
         <li><b>One admin prompt, ever</b><span>Windows asks once to create the VPN. After that, turning it on and off needs no prompts.</span></li>
+        <li><b>Turns itself on for open Wi-Fi</b><span>Join a network with no password (a café, an airport, a hotel) and the VPN switches on by itself, with a note saying why. Trust a network once and it's left alone there.</span></li>
         <li><b>No leaks</b><span>While connected, WireGuard blocks any traffic that tries to go around the tunnel. The config's private key is stored where only Windows can read it.</span></li>
       </ul>
     </div>
@@ -672,7 +674,7 @@ footer p { margin: 0; max-width: 70ch; }
 <section id="protection">
   <div class="wrap">
     <div class="kicker"><b>08</b> Real-time protection</div>
-    <h2>Four watchers.<br>One background agent.</h2>
+    <h2>Five watchers.<br>One background agent.</h2>
     <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
 
     <div class="layers">
@@ -695,6 +697,11 @@ footer p { margin: 0; max-width: 70ch; }
         <div class="n">RW</div>
         <div><h3>Ransomware protection</h3><p>Watches Documents, Desktop, Pictures, Music, Videos and Downloads for files suddenly turning into unreadable data, then names the program writing the most to disk right now.</p></div>
         <div class="toast"><div class="t-title"><span>Possible ransomware</span><span>✕</span></div><div class="t-file">14 files suddenly became unreadable</div><div class="t-detail">Likely cause: invoice_viewer.exe (312 MB written just now)</div><div class="t-actions"><span class="d">End program</span><span class="q">Quarantine</span><span>Ignore</span></div></div>
+      </div>
+      <div class="layer">
+        <div class="n">USB</div>
+        <div><h3>USB drive protection</h3><p>Plug in a USB drive or SD card and Sentinel scans it straight away in the background. Threats get the usual popup; a clean drive gets a quick all-clear. Or have it ask first.</p></div>
+        <div class="toast good"><div class="t-title"><span>USB drive is clean</span><span>✕</span></div><div class="t-file">KINGSTON (E:)</div><div class="t-detail">1,204 files checked, no threats found.</div></div>
       </div>
     </div>
   </div>
