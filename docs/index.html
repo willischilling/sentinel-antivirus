@@ -68,6 +68,7 @@ header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, v
 .brand span { font: 700 15px/1 "Archivo", sans-serif; font-stretch: 125%; letter-spacing: .16em; }
 .nav a.link { text-decoration: none; color: var(--muted); font-size: 14px; }
 .nav a.link:hover { color: var(--text); }
+.nav a.link { white-space: nowrap; }
 .btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
 .btn.primary { background: var(--accent); color: #fff; }
 .btn.primary:hover { background: var(--accent-strong); }
@@ -328,6 +329,27 @@ footer p { margin: 0; max-width: 70ch; }
 .chips button[aria-pressed="true"] { background: var(--accent-strong); color: #fff; }
 @media (max-width: 960px) { .more-grid { grid-template-columns: 1fr; } }
 
+
+/* security check */
+.sec-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 20px; margin-top: 48px; }
+.sec-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+.sec-head { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
+.sec-ring { width: 92px; height: 92px; border-radius: 50%; border: 8px solid var(--good); display: grid; place-items: center; flex: none; text-align: center; line-height: 1; }
+.sec-ring b { font: 800 28px "Archivo", sans-serif; display: block; }
+.sec-ring small { font: 11px "IBM Plex Mono", monospace; color: var(--muted); }
+.sec-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+.sec-item .pts { margin-left: auto; font: 12px "IBM Plex Mono", monospace; color: var(--muted); }
+.sec-item .ok { color: var(--good); font-weight: 700; width: 16px; }
+.sec-item .no { color: var(--warn); font-weight: 700; width: 16px; }
+.sec-item .fixbtn { margin-left: auto; }
+.pw-field { display: flex; gap: 8px; margin-top: 14px; }
+.pw-field input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; color: var(--text); padding: 10px 12px; font: 15px "IBM Plex Sans", sans-serif; outline: 0; }
+.pw-field input:focus { border-color: var(--accent); }
+.pw-result { margin-top: 14px; font-weight: 600; min-height: 22px; }
+.pw-result.bad { color: var(--bad); } .pw-result.good { color: var(--good); } .pw-result.warn { color: var(--warn); }
+.pw-note { margin-top: 14px; font-size: 13px; color: var(--muted); }
+@media (max-width: 960px) { .sec-grid { grid-template-columns: 1fr; } }
+
 @media (max-width: 960px) {
   .hero .wrap, .split, .install { grid-template-columns: 1fr; }
   .hero { padding-top: 56px; }
@@ -361,9 +383,7 @@ footer p { margin: 0; max-width: 70ch; }
     <a class="link" href="#ask">Ask Sentinel</a>
     <a class="link" href="#vpn">VPN</a>
     <a class="link" href="#firewall">Firewall</a>
-    <a class="link" href="#more">More</a>
-    <a class="link" href="#protection">Protection</a>
-    <a class="link" href="#limits">Limits</a>
+    <a class="link" href="#security">Security</a>
     <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
     <div class="contact">
       <button class="btn ghost small" id="contact-btn" aria-expanded="false" aria-controls="contact-pop">Contact</button>
@@ -589,11 +609,47 @@ footer p { margin: 0; max-width: 70ch; }
   </div>
 </section>
 
+<section id="security">
+  <div class="wrap">
+    <div class="split" style="margin-bottom:0">
+      <div>
+        <div class="kicker"><b>06</b> Security Check</div>
+        <h2>One number for how safe you are.</h2>
+      </div>
+      <p class="lede">Sentinel scores your PC out of 100: its own protection, Windows Firewall, Defender, web protection, whether your apps are patched, and more. Anything missing comes first, with a Fix button.</p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card">
+        <div class="sec-head">
+          <div class="sec-ring"><div><b>89</b><small>/100</small></div></div>
+          <div><div style="font-weight:600;font-size:18px">1 thing to fix</div><div style="color:var(--muted);font-size:14px">Each item adds points.</div></div>
+        </div>
+        <div class="sec-item"><span class="no">!</span><b>10 apps need updates</b><button class="mini-btn fixbtn" type="button">Fix</button></div>
+        <div class="sec-item"><span class="ok">✓</span>Real-time protection is on<span class="pts">+20</span></div>
+        <div class="sec-item"><span class="ok">✓</span>Windows Firewall is on<span class="pts">+15</span></div>
+        <div class="sec-item"><span class="ok">✓</span>Microsoft Defender is on<span class="pts">+10</span></div>
+        <div class="sec-item"><span class="ok">✓</span>Web protection is on<span class="pts">+10</span></div>
+        <div class="sec-item"><span class="ok">✓</span>Scheduled scans are on<span class="pts">+5</span></div>
+      </div>
+      <div class="sec-card">
+        <div style="font-weight:600;font-size:19px;font-family:'Archivo',sans-serif">Password leak check</div>
+        <p style="color:var(--muted);margin:8px 0 0;font-size:14.5px">Try it right here. See if a password has shown up in a known data breach.</p>
+        <form class="pw-field" id="pw-form" autocomplete="off">
+          <input type="password" id="pw-input" placeholder="Type a password" aria-label="Password to check" autocomplete="off" spellcheck="false">
+          <button class="btn primary small" type="submit">Check</button>
+        </form>
+        <div class="pw-result" id="pw-result" aria-live="polite"></div>
+        <p class="pw-note">Your password never leaves your browser: it's hashed (SHA-1) on your device and only the first 5 characters of the hash are sent to <a href="https://haveibeenpwned.com/Passwords">Have I Been Pwned</a>. Nothing is stored. The same check is in the app.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="app">
   <div class="wrap">
     <div class="app-head">
       <div>
-        <div class="kicker"><b>06</b> The app</div>
+        <div class="kicker"><b>07</b> The app</div>
         <h2>Calm when it's quiet.<br>Loud when it matters.</h2>
       </div>
       <div class="seg" role="group" aria-label="App theme">
@@ -615,7 +671,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="protection">
   <div class="wrap">
-    <div class="kicker"><b>07</b> Real-time protection</div>
+    <div class="kicker"><b>08</b> Real-time protection</div>
     <h2>Four watchers.<br>One background agent.</h2>
     <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
 
@@ -646,7 +702,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="languages">
   <div class="wrap">
-    <div class="kicker"><b>08</b> Five languages</div>
+    <div class="kicker"><b>09</b> Five languages</div>
     <h2>Speaks your language.</h2>
     <p class="lede" style="margin-top:22px">Starts in your Windows display language and switches live — popups, tray menu, activity log, installer and uninstaller included. Dates and numbers follow local formats.</p>
     <div class="langs">
@@ -663,7 +719,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="split" style="margin-bottom:0">
       <div>
-        <div class="kicker"><b>09</b> Honest limits</div>
+        <div class="kicker"><b>10</b> Honest limits</div>
         <h2>What it can't do.</h2>
       </div>
       <p class="lede">Sentinel is a portfolio project, not a replacement for Microsoft Defender. Keep Defender on. Here's exactly where the edges are.</p>
@@ -681,7 +737,7 @@ footer p { margin: 0; max-width: 70ch; }
 <section id="install">
   <div class="wrap install">
     <div>
-      <div class="kicker"><b>10</b> Install</div>
+      <div class="kicker"><b>11</b> Install</div>
       <h2>Two minutes,<br>no admin rights.</h2>
       <ol class="steps" style="margin-top:36px">
         <li><div><b>Download SentinelSetup.exe</b><span>From the latest GitHub release. Its SHA-256 is listed in the release notes.</span></div></li>
@@ -1004,6 +1060,33 @@ document.querySelectorAll("[data-fwtab]").forEach(b => b.addEventListener("click
     document.getElementById("sched-text").textContent = texts[b.dataset.f];
   }));
 })();
+
+// ---- Password leak check (k-anonymity: only 5 hash characters leave the browser) ----
+document.getElementById("pw-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const input = document.getElementById("pw-input"), out = document.getElementById("pw-result");
+  const password = input.value;
+  input.value = "";
+  if (!password) return;
+  out.className = "pw-result"; out.textContent = "Checking...";
+  try {
+    const bytes = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(password));
+    const hash = [...new Uint8Array(bytes)].map(b => b.toString(16).padStart(2, "0")).join("").toUpperCase();
+    const res = await fetch("https://api.pwnedpasswords.com/range/" + hash.slice(0, 5), { headers: { "Add-Padding": "true" } });
+    const text = await res.text();
+    const line = text.split("\n").find(l => l.split(":")[0].trim() === hash.slice(5));
+    const count = line ? parseInt(line.split(":")[1], 10) : 0;
+    if (count > 0) {
+      out.className = "pw-result bad";
+      out.textContent = `Found in ${count.toLocaleString()} data breaches. Don't use this password anywhere.`;
+    } else {
+      out.className = "pw-result good";
+      out.textContent = "Not found in any known breach. Still, use it for one account only.";
+    }
+  } catch (err) {
+    out.className = "pw-result warn"; out.textContent = "Couldn't check right now. Try again in a moment.";
+  }
+});
 
 // ---- latest release details from GitHub ----
 fetch("https://api.github.com/repos/willischilling/sentinel-antivirus/releases/latest")
