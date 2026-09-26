@@ -9,7 +9,8 @@ from tkinter import font as tkfont
 
 from PIL import Image, ImageDraw, ImageTk
 
-from theme import ACCENT, BG, BORDER, CARD, CARD_HOVER, FONT, FONT_BOLD, PANEL, TEXT, TEXT_MUTED
+import theme as C
+from theme import FONT, FONT_BOLD
 
 SUPERSAMPLE = 4
 _image_cache = {}
@@ -33,6 +34,8 @@ ICONS = {
     "settings": "",
     "globe": "",
     "info": "",
+    "update": "",
+    "cloud": "",
 }
 _icon_family = None
 
@@ -47,7 +50,10 @@ def icon_font(size: int):
     return (_icon_family, size) if _icon_family else FONT
 
 
-def icon_label(parent, name, size=14, fg=TEXT, bg=CARD, **kw):
+def icon_label(parent, name, size=14, fg=None, bg=None, **kw):
+    # Colors default to the current theme at call time (not import time).
+    fg = C.TEXT if fg is None else fg
+    bg = C.CARD if bg is None else bg
     text = ICONS.get(name, "") if _icon_family != "" else ""
     return tk.Label(parent, text=text, font=icon_font(size), fg=fg, bg=bg, **kw)
 
@@ -100,8 +106,10 @@ class RoundedCard(tk.Frame):
     """A card with antialiased rounded corners. Put content in `.body`.
     Padding must be at least the radius so content never sits under a corner."""
 
-    def __init__(self, parent, bg=CARD, outer=BG, radius=12, padx=22, pady=20,
+    def __init__(self, parent, bg=None, outer=None, radius=12, padx=22, pady=20,
                  hover_bg=None, command=None, **kw):
+        bg = C.CARD if bg is None else bg
+        outer = C.BG if outer is None else outer
         super().__init__(parent, bg=bg, **kw)
         self.bg, self.outer, self.radius = bg, outer, radius
         self.rest_bg = bg  # color when not hovered (e.g. a selected chip)
@@ -115,7 +123,7 @@ class RoundedCard(tk.Frame):
         self._paint_corners(bg)
 
         if command:
-            self._make_clickable(command, hover_bg or CARD_HOVER)
+            self._make_clickable(command, hover_bg or C.CARD_HOVER)
 
     def _paint_corners(self, inner):
         for lbl, img in zip(self._corners, _corner_images(self.radius, inner, self.outer)):
@@ -166,21 +174,22 @@ def _switch_image(on: bool, enabled: bool, bg: str, w=46, h=26):
         s = SUPERSAMPLE
         img = Image.new("RGB", (w * s, h * s), bg)
         d = ImageDraw.Draw(img)
-        track = (ACCENT if on else BORDER) if enabled else "#2a3142"
+        track = (C.ACCENT if on else C.BORDER) if enabled else C.SWITCH_DISABLED
         d.rounded_rectangle((0, 0, w * s - 1, h * s - 1), radius=h * s // 2, fill=track)
         pad = 3 * s
         knob = h * s - 2 * pad
         x = (w * s - pad - knob) if on else pad
-        d.ellipse((x, pad, x + knob, pad + knob), fill="#ffffff" if enabled else "#6b7385")
+        d.ellipse((x, pad, x + knob, pad + knob), fill="#ffffff" if enabled else C.KNOB_DISABLED)
         return _downsample(img, (w, h))
 
-    return _cached(("switch", on, enabled, bg, w, h), render)
+    return _cached(("switch", C.current, on, enabled, bg, w, h), render)
 
 
 class ToggleSwitch(tk.Label):
     _keeps_own_clicks = True  # a clickable card around it must not also react
 
-    def __init__(self, parent, command=None, bg=CARD, on=False):
+    def __init__(self, parent, command=None, bg=None, on=False):
+        bg = C.CARD if bg is None else bg
         super().__init__(parent, bd=0, bg=bg, cursor="hand2", highlightthickness=0)
         self.command, self.on, self.enabled, self._bg = command, on, True, bg
         self.bind("<Button-1>", self._click)
@@ -232,14 +241,15 @@ def _ring_image(size, bg, track, color, start=None, extent=None, width_frac=0.07
 class Ring(tk.Canvas):
     """Status ring: static (colored ring + center image/glyph/text) or spinning."""
 
-    def __init__(self, parent, size=150, bg=CARD):
+    def __init__(self, parent, size=150, bg=None):
+        bg = C.CARD if bg is None else bg
         super().__init__(parent, width=size, height=size, bg=bg, highlightthickness=0)
         self.size, self._bg = size, bg
         self._ring = self.create_image(size // 2, size // 2)
         self._center_img = self.create_image(size // 2, size // 2)
-        self._glyph = self.create_text(size // 2, size // 2 - 8, fill=TEXT, font=icon_font(30))
-        self._text = self.create_text(size // 2, size // 2, fill=TEXT, font=("Segoe UI Semibold", 18))
-        self._sub = self.create_text(size // 2, size // 2 + 22, fill=TEXT_MUTED, font=("Segoe UI", 9))
+        self._glyph = self.create_text(size // 2, size // 2 - 8, fill=C.TEXT, font=icon_font(30))
+        self._text = self.create_text(size // 2, size // 2, fill=C.TEXT, font=("Segoe UI Semibold", 18))
+        self._sub = self.create_text(size // 2, size // 2 + 22, fill=C.TEXT_MUTED, font=("Segoe UI", 9))
         self._spin_job = None
         self._angle = 0
 
@@ -276,7 +286,7 @@ class Ring(tk.Canvas):
     def _tick(self):
         self._angle = (self._angle + 12) % 360
         self.itemconfigure(self._ring, image=_ring_image(
-            self.size, self._bg, BORDER, ACCENT, start=self._angle, extent=100))
+            self.size, self._bg, C.BORDER, C.ACCENT, start=self._angle, extent=100))
         self._spin_job = self.after(33, self._tick)
 
     def stop(self):
@@ -288,48 +298,57 @@ class Ring(tk.Canvas):
 # ----------------------------------------------------------------- NavItem --
 class NavItem(tk.Frame):
     def __init__(self, parent, icon, label, command):
-        super().__init__(parent, bg=PANEL, cursor="hand2")
+        super().__init__(parent, bg=C.PANEL, cursor="hand2")
         self.active = False
-        self.bar = tk.Frame(self, bg=PANEL, width=3)
+        self.bar = tk.Frame(self, bg=C.PANEL, width=3)
         self.bar.pack(side="left", fill="y")
-        self.icon = icon_label(self, icon, 13, fg=TEXT_MUTED, bg=PANEL)
+        self.icon = icon_label(self, icon, 13, fg=C.TEXT_MUTED, bg=C.PANEL)
         self.icon.pack(side="left", padx=(17, 12), pady=11)
-        self.text = tk.Label(self, text=label, font=FONT, fg=TEXT_MUTED, bg=PANEL, anchor="w")
+        self.badge = tk.Label(self, text="●", font=("Segoe UI", 8), fg=C.ACCENT, bg=C.PANEL)
+        self.text = tk.Label(self, text=label, font=FONT, fg=C.TEXT_MUTED, bg=C.PANEL, anchor="w")
         self.text.pack(side="left", fill="x", expand=True)
-        for w in (self, self.bar, self.icon, self.text):
+        for w in (self, self.bar, self.icon, self.text, self.badge):
             w.bind("<Button-1>", lambda e: command())
             w.bind("<Enter>", lambda e: self._hover(True))
             w.bind("<Leave>", lambda e: self._hover(False))
 
+    def set_badge(self, visible: bool):
+        """A small dot after the label, e.g. 'update available'."""
+        if visible:
+            self.badge.pack(side="right", padx=(0, 16), before=self.text)
+        else:
+            self.badge.pack_forget()
+
     def _paint(self, bg, fg, bar, font):
-        for w in (self, self.icon, self.text):
+        for w in (self, self.icon, self.text, self.badge):
             w.configure(bg=bg)
-        self.icon.configure(fg=fg if not self.active else ACCENT)
+        self.icon.configure(fg=fg if not self.active else C.ACCENT)
         self.text.configure(fg=fg, font=font)
         self.bar.configure(bg=bar)
 
     def set_active(self, active: bool):
         self.active = active
         if active:
-            self._paint(CARD, TEXT, ACCENT, FONT_BOLD)
+            self._paint(C.CARD, C.TEXT, C.ACCENT, FONT_BOLD)
         else:
-            self._paint(PANEL, TEXT_MUTED, PANEL, FONT)
+            self._paint(C.PANEL, C.TEXT_MUTED, C.PANEL, FONT)
 
     def _hover(self, inside: bool):
         if not self.active:
-            self._paint(CARD if inside else PANEL, TEXT if inside else TEXT_MUTED, PANEL, FONT)
+            self._paint(C.CARD if inside else C.PANEL, C.TEXT if inside else C.TEXT_MUTED, C.PANEL, FONT)
 
 
 # -------------------------------------------------------------- EmptyState --
 class EmptyState(tk.Frame):
     """Centered message shown over an empty table."""
 
-    def __init__(self, parent, icon, title, message, bg=CARD):
+    def __init__(self, parent, icon, title, message, bg=None):
+        bg = C.CARD if bg is None else bg
         super().__init__(parent, bg=bg)
-        icon_label(self, icon, 30, fg=TEXT_MUTED, bg=bg).pack()
-        self.title = tk.Label(self, text=title, font=FONT_BOLD, fg=TEXT, bg=bg)
+        icon_label(self, icon, 30, fg=C.TEXT_MUTED, bg=bg).pack()
+        self.title = tk.Label(self, text=title, font=FONT_BOLD, fg=C.TEXT, bg=bg)
         self.title.pack(pady=(10, 2))
-        self.message = tk.Label(self, text=message, font=FONT, fg=TEXT_MUTED, bg=bg,
+        self.message = tk.Label(self, text=message, font=FONT, fg=C.TEXT_MUTED, bg=bg,
                                 wraplength=380, justify="center")
         self.message.pack()
 

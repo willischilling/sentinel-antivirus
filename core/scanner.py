@@ -5,10 +5,21 @@ are dropped for files with a valid publisher signature."""
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import archives, authenticode, database, heuristics, signatures, yara_engine
+from . import archives, authenticode, database, heuristics, paths, signatures, yara_engine
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", "$RECYCLE.BIN", "System Volume Information"}
 MAX_FILE_SIZE = 500 * 1024 * 1024  # skip files over 500MB (perf)
+# Sentinel's own data (threat database, compiled rules, logs) and the
+# quarantine (known threats, already neutralised) must never be reported.
+OWN_DIRS = tuple(p.resolve() for p in (paths.DATA_DIR, paths.QUARANTINE_DIR))
+
+
+def is_own_file(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return any(resolved.is_relative_to(d) for d in OWN_DIRS)
 
 
 @dataclass
@@ -23,6 +34,8 @@ class ScanResult:
 
 
 def scan_file(path: Path) -> ScanResult:
+    if is_own_file(path):
+        return ScanResult(path, "clean")
     try:
         size = path.stat().st_size
         if size > MAX_FILE_SIZE:
@@ -84,6 +97,6 @@ def scan_directory(root: Path, recursive: bool = True):
     for entry in walker:
         if entry.is_dir():
             continue
-        if any(part in SKIP_DIRS for part in entry.parts):
+        if any(part in SKIP_DIRS for part in entry.parts) or is_own_file(entry):
             continue
         yield scan_file(entry)

@@ -20,7 +20,7 @@ from core import (
 from core.i18n import number, t
 from gui import clip, configure_style, default_watch_path
 from monitor import file_watcher, process_watcher, ransomware_watcher, startup_watcher
-from theme import ACCENT, BAD, WARN
+import theme as C
 from toast import ToastManager
 
 # Startup locations keep stable English names internally (they're part of the
@@ -91,15 +91,23 @@ class Agent(tk.Tk):
         self.after(100, self._pump)
 
     def _sync_language(self):
-        """The window saves language changes to the settings file; follow them
-        here without a restart (popups, log lines and the tray menu)."""
+        """The window saves language and theme changes to the settings file;
+        follow them here without a restart (popups, log lines, tray menu)."""
         try:
             mtime = settings.SETTINGS_PATH.stat().st_mtime_ns
         except FileNotFoundError:
             mtime = None
-        if mtime == self._settings_mtime:
+        if mtime != self._settings_mtime:
+            self._settings_mtime = mtime
+            self._theme_choice = settings.load().get("theme", "dark")
+        # Checked every time, since "Match Windows" can change without the file changing.
+        palette = C.resolve(getattr(self, "_theme_choice", "dark"))
+        if palette != C.current:
+            C.apply(palette)
+            configure_style(self)  # popup buttons
+        if mtime == getattr(self, "_language_mtime", object()):
             return
-        self._settings_mtime = mtime
+        self._language_mtime = mtime
         before = i18n.current()
         i18n.set_language(settings.load().get("language"))
         tray = getattr(self, "tray", None)
@@ -205,12 +213,12 @@ class Agent(tk.Tk):
         path_key = str(path)
         if is_threat:
             reason = result.signature_name
-            title, accent, detail = t("toast_virus_detected"), BAD, t("toast_matches_known", name=reason)
+            title, accent, detail = t("toast_virus_detected"), C.BAD, t("toast_matches_known", name=reason)
         else:
             flags = result.heuristic_flags
             reason = flags[0]
             detail = t("toast_more", flag=reason, n=len(flags) - 1) if len(flags) > 1 else reason
-            title, accent = t("toast_suspicious_file"), WARN
+            title, accent = t("toast_suspicious_file"), C.WARN
 
         def do_quarantine():
             dest = quarantine.quarantine_file(path, reason)
@@ -263,7 +271,7 @@ class Agent(tk.Tk):
             filename=alert.name,
             detail=t("toast_matches_known", name=alert.signature_name),
             location=str(exe.parent),
-            accent=BAD,
+            accent=C.BAD,
             actions=[
                 (t("btn_end_program"), "Danger.TButton", end_process),
                 (t("btn_quarantine"), "Accent.TButton", end_and_quarantine),
@@ -293,13 +301,13 @@ class Agent(tk.Tk):
             return
         short_name = entry.name.rsplit("\\", 1)[-1]
         if is_threat:
-            title, accent = t("startup_virus_task" if is_task else "startup_virus_program"), BAD
+            title, accent = t("startup_virus_task" if is_task else "startup_virus_program"), C.BAD
             detail = t("toast_matches_known", name=result.signature_name)
         elif signature.signed:
-            title, accent = t("startup_new_task" if is_task else "startup_new_program"), ACCENT
+            title, accent = t("startup_new_task" if is_task else "startup_new_program"), C.ACCENT
             detail = t("startup_signed", name=subject, publisher=signature.publisher)
         else:
-            title, accent = t("startup_new_task" if is_task else "startup_new_program"), WARN
+            title, accent = t("startup_new_task" if is_task else "startup_new_program"), C.WARN
             detail = t("startup_unsigned", name=subject)
         location = location_name(entry.location)
         activity.log(t("log_startup_added", name=entry.name, location=location, command=entry.command),
@@ -364,7 +372,7 @@ class Agent(tk.Tk):
         actions.append((t("btn_ignore"), "Ghost.TButton", lambda: None))
         self.toasts.show(
             title=t("toast_possible_ransomware"), filename=t("ransom_unreadable", n=alert.damaged),
-            detail=detail, location=alert.folder, accent=BAD, actions=actions,
+            detail=detail, location=alert.folder, accent=C.BAD, actions=actions,
             on_error=self._log_failure(alert.folder),
         )
         self._beep(True)

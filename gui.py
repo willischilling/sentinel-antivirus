@@ -3,9 +3,11 @@ and the switch for real-time protection. Protection itself runs in a separate
 background agent process (agent.py) so it survives this window closing.
 """
 import queue
+import re
 import sys
 import threading
 import tkinter as tk
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -13,43 +15,44 @@ from tkinter import filedialog, messagebox, ttk
 import launcher
 import single_instance
 from core import (
-    activity, autostart, database, i18n, paths, quarantine, scanner, settings, signatures, threat_intel,
+    activity, app_update, autostart, database, i18n, paths, quarantine, scanner, settings, signatures,
+    threat_intel,
 )
 from core.i18n import number, plural, t
 from core.version import VERSION
-from theme import (
-    ACCENT, ACCENT_DARK, BAD, BG, BORDER, CARD, CARD_HOVER, FONT, FONT_BOLD, FONT_HERO,
-    FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE, GOOD, PANEL, TEXT, TEXT_MUTED, WARN,
-)
+import theme as C
+from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE
 from widgets import EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label
 
 
 def configure_style(root: tk.Tk):
     style = ttk.Style(root)
     style.theme_use("clam")
-    style.configure(".", background=BG, foreground=TEXT, font=FONT)
+    style.configure(".", background=C.BG, foreground=C.TEXT, font=FONT)
 
     def button(name, bg, fg, active, border=None, font=FONT_BOLD, padding=(16, 9)):
         style.configure(name, background=bg, foreground=fg, borderwidth=1 if border else 0,
                         bordercolor=border or bg, lightcolor=bg, darkcolor=bg,
                         focuscolor=bg, font=font, padding=padding)
-        style.map(name, background=[("disabled", BORDER), ("active", active)],
-                  foreground=[("disabled", TEXT_MUTED)])
+        style.map(name, background=[("disabled", C.BORDER), ("active", active)],
+                  foreground=[("disabled", C.TEXT_MUTED)])
 
-    button("Accent.TButton", ACCENT, "#ffffff", ACCENT_DARK)
-    button("Hero.TButton", ACCENT, "#ffffff", ACCENT_DARK,
+    button("Accent.TButton", C.ACCENT, "#ffffff", C.ACCENT_DARK)
+    button("Hero.TButton", C.ACCENT, "#ffffff", C.ACCENT_DARK,
            font=("Segoe UI Semibold", 11), padding=(26, 11))
-    button("Ghost.TButton", CARD, TEXT, CARD_HOVER, border=BORDER, font=FONT)
-    button("Danger.TButton", CARD, BAD, CARD_HOVER, border=BORDER, font=FONT)
+    button("Ghost.TButton", C.CARD, C.TEXT, C.CARD_HOVER, border=C.BORDER, font=FONT)
+    button("Danger.TButton", C.CARD, C.BAD, C.CARD_HOVER, border=C.BORDER, font=FONT)
 
-    style.configure("Treeview", background=CARD, fieldbackground=CARD, foreground=TEXT,
+    style.configure("Treeview", background=C.CARD, fieldbackground=C.CARD, foreground=C.TEXT,
                     borderwidth=0, font=FONT_SMALL, rowheight=30)
-    style.configure("Treeview.Heading", background=CARD, foreground=TEXT_MUTED, borderwidth=0,
+    style.configure("Treeview.Heading", background=C.CARD, foreground=C.TEXT_MUTED, borderwidth=0,
                     relief="flat", font=("Segoe UI Semibold", 9), padding=(6, 8))
-    style.map("Treeview.Heading", background=[("active", CARD)])
-    style.map("Treeview", background=[("selected", ACCENT_DARK)], foreground=[("selected", "#ffffff")])
+    style.map("Treeview.Heading", background=[("active", C.CARD)])
+    style.map("Treeview", background=[("selected", C.ACCENT_DARK)], foreground=[("selected", "#ffffff")])
     style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
-    style.configure("TEntry", fieldbackground=CARD, foreground=TEXT, insertcolor=TEXT, borderwidth=1)
+    style.configure("TEntry", fieldbackground=C.CARD, foreground=C.TEXT, insertcolor=C.TEXT, borderwidth=1)
+    style.configure("Horizontal.TProgressbar", background=C.ACCENT, troughcolor=C.BORDER, borderwidth=0,
+                    bordercolor=C.BORDER, lightcolor=C.ACCENT, darkcolor=C.ACCENT, thickness=8)
 
 
 def default_watch_path() -> str:
@@ -80,17 +83,17 @@ def clip(text: str, limit: int) -> str:
 
 
 def page_header(parent, title, subtitle):
-    tk.Label(parent, text=title, font=FONT_TITLE, fg=TEXT, bg=BG).pack(anchor="w")
-    tk.Label(parent, text=subtitle, font=FONT, fg=TEXT_MUTED, bg=BG).pack(anchor="w", pady=(2, 18))
+    tk.Label(parent, text=title, font=FONT_TITLE, fg=C.TEXT, bg=C.BG).pack(anchor="w")
+    tk.Label(parent, text=subtitle, font=FONT, fg=C.TEXT_MUTED, bg=C.BG).pack(anchor="w", pady=(2, 18))
 
 
-def pill(parent, bg=CARD):
-    return tk.Label(parent, font=("Segoe UI Semibold", 8), bg=bg, padx=9, pady=2)
+def pill(parent, bg=None):
+    return tk.Label(parent, font=("Segoe UI Semibold", 8), bg=C.CARD if bg is None else bg, padx=9, pady=2)
 
 
 def set_pill(label, on: bool):
     label.configure(text=t("pill_active") if on else t("off"),
-                    fg="#0b1120" if on else TEXT_MUTED, bg=GOOD if on else BORDER)
+                    fg="#0b1120" if on else C.TEXT_MUTED, bg=C.GOOD if on else C.BORDER)
 
 
 class App(tk.Tk):
@@ -98,10 +101,12 @@ class App(tk.Tk):
         super().__init__()
         self.settings = settings.load()
         i18n.set_language(self.settings.get("language"))
+        C.apply(C.resolve(self.settings.get("theme", "dark")))
         self.title(t("app_title"))
         self.geometry("1080x700")
         self.minsize(980, 640)
-        self.configure(bg=BG)
+        self.configure(bg=C.BG)
+        C.style_title_bar(self)
         try:
             self.iconbitmap(default=str(paths.resource("assets/icon.ico")))
         except tk.TclError:
@@ -120,10 +125,14 @@ class App(tk.Tk):
         self.watch_path = saved_path if saved_path and Path(saved_path).exists() else default_watch_path()
         self.activity_tail = activity.Tail()
         self._load_images()
+        # App update status, kept outside the widgets so it survives a language rebuild.
+        self._update = {"state": "checking", "release": None, "error": None, "progress": (0, 0)}
 
         self._build_layout()
         self._show_page("dashboard")
         self.after(200, self._pump_queue)
+        self.after(2500, self._check_for_updates)  # quietly, in the background
+        self.after(3000, self._follow_windows_theme)
 
         if autostart.supported() and autostart.is_enabled():
             autostart.set_enabled(True)  # re-point at this exe in case it was reinstalled elsewhere
@@ -149,19 +158,19 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------- layout --
     def _build_layout(self):
-        sidebar = tk.Frame(self, bg=PANEL, width=232)
+        sidebar = tk.Frame(self, bg=C.PANEL, width=232)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
-        brand = tk.Frame(sidebar, bg=PANEL)
+        brand = tk.Frame(sidebar, bg=C.PANEL)
         brand.pack(anchor="w", padx=20, pady=(22, 26))
         if self._logo_small:
-            tk.Label(brand, image=self._logo_small, bg=PANEL).pack(side="left", padx=(0, 11))
-        brand_text = tk.Frame(brand, bg=PANEL)
+            tk.Label(brand, image=self._logo_small, bg=C.PANEL).pack(side="left", padx=(0, 11))
+        brand_text = tk.Frame(brand, bg=C.PANEL)
         brand_text.pack(side="left")
-        tk.Label(brand_text, text="SENTINEL", bg=PANEL, fg=TEXT,
+        tk.Label(brand_text, text="SENTINEL", bg=C.PANEL, fg=C.TEXT,
                  font=("Segoe UI Semibold", 14)).pack(anchor="w")
-        tk.Label(brand_text, text=t("brand_sub"), bg=PANEL, fg=TEXT_MUTED, font=FONT_SMALL).pack(anchor="w")
+        tk.Label(brand_text, text=t("brand_sub"), bg=C.PANEL, fg=C.TEXT_MUTED, font=FONT_SMALL).pack(anchor="w")
 
         self.nav = {}
         for key, icon, label in [
@@ -170,26 +179,27 @@ class App(tk.Tk):
             ("protection", "shield", "nav_protection"),
             ("quarantine", "lock", "nav_quarantine"),
             ("activity", "history", "nav_history"),
+            ("updates", "refresh", "nav_updates"),
             ("settings", "settings", "nav_settings"),
         ]:
             item = NavItem(sidebar, icon, t(label), lambda k=key: self._show_page(k))
             item.pack(fill="x")
             self.nav[key] = item
 
-        status = RoundedCard(sidebar, bg=CARD, outer=PANEL, radius=10, padx=14, pady=12)
+        status = RoundedCard(sidebar, bg=C.CARD, outer=C.PANEL, radius=10, padx=14, pady=12)
         status.pack(side="bottom", fill="x", padx=16, pady=18)
-        self.side_status_icon = icon_label(status.body, "shield", 16, fg=BAD)
+        self.side_status_icon = icon_label(status.body, "shield", 16, fg=C.BAD)
         self.side_status_icon.pack(side="left", padx=(0, 10))
-        col = tk.Frame(status.body, bg=CARD)
+        col = tk.Frame(status.body, bg=C.CARD)
         col.pack(side="left")
-        self.side_status_title = tk.Label(col, text=t("status_checking"), font=FONT_BOLD, fg=TEXT, bg=CARD,
+        self.side_status_title = tk.Label(col, text=t("status_checking"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD,
                                           wraplength=150, justify="left")
         self.side_status_title.pack(anchor="w")
-        self.side_status_sub = tk.Label(col, text="", font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD,
+        self.side_status_sub = tk.Label(col, text="", font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD,
                                         wraplength=150, justify="left")
         self.side_status_sub.pack(anchor="w")
 
-        self.content = tk.Frame(self, bg=BG)
+        self.content = tk.Frame(self, bg=C.BG)
         self.content.pack(side="left", fill="both", expand=True, padx=30, pady=26)
 
         self.pages = {}
@@ -198,7 +208,9 @@ class App(tk.Tk):
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
+        self._build_updates_page()
         self._build_settings_page()
+        self._render_update_state()
 
     def _show_page(self, key):
         self.current_page = key
@@ -216,19 +228,19 @@ class App(tk.Tk):
 
     # ---------------------------------------------------------- dashboard --
     def _build_dashboard_page(self):
-        page = tk.Frame(self.content, bg=BG)
+        page = tk.Frame(self.content, bg=C.BG)
         self.pages["dashboard"] = page
 
         hero = RoundedCard(page, radius=16, padx=34, pady=30)
         hero.pack(fill="x")
         self.hero_ring = Ring(hero.body, size=156)
         self.hero_ring.pack(side="left")
-        text = tk.Frame(hero.body, bg=CARD)
+        text = tk.Frame(hero.body, bg=C.CARD)
         text.pack(side="left", fill="x", expand=True, padx=(34, 0))
-        self.hero_title = tk.Label(text, text=t("hero_checking"), font=FONT_HERO, fg=TEXT, bg=CARD,
+        self.hero_title = tk.Label(text, text=t("hero_checking"), font=FONT_HERO, fg=C.TEXT, bg=C.CARD,
                                    justify="left", anchor="w")
         self.hero_title.pack(anchor="w", fill="x")
-        self.hero_sub = tk.Label(text, text="", font=FONT, fg=TEXT_MUTED, bg=CARD,
+        self.hero_sub = tk.Label(text, text="", font=FONT, fg=C.TEXT_MUTED, bg=C.CARD,
                                  wraplength=420, justify="left", anchor="w")
         self.hero_sub.pack(anchor="w", fill="x", pady=(6, 20))
 
@@ -238,14 +250,14 @@ class App(tk.Tk):
             self.hero_title.configure(wraplength=width)
 
         text.bind("<Configure>", rewrap)
-        buttons = tk.Frame(text, bg=CARD)
+        buttons = tk.Frame(text, bg=C.CARD)
         buttons.pack(anchor="w")
         ttk.Button(buttons, text=t("scan_now"), style="Hero.TButton",
                    command=self._quick_scan).pack(side="left")
         self.hero_protect_btn = ttk.Button(buttons, text=t("turn_on_protection"), style="Ghost.TButton",
                                            command=self._toggle_protection)
 
-        cards = tk.Frame(page, bg=BG)
+        cards = tk.Frame(page, bg=C.BG)
         cards.pack(fill="x", pady=(18, 0))
         for i in range(3):
             cards.columnconfigure(i, weight=1, uniform="cards")
@@ -253,31 +265,31 @@ class App(tk.Tk):
         scan_card = RoundedCard(cards, command=lambda: self._show_page("scan"))
         scan_card.grid(row=0, column=0, sticky="nsew", padx=(0, 9))
         self._card_header(scan_card.body, "scan", t("card_scanner"))
-        self.dash_scan_value = tk.Label(scan_card.body, text=t("never"), font=FONT_LARGE, fg=TEXT, bg=CARD)
+        self.dash_scan_value = tk.Label(scan_card.body, text=t("never"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD)
         self.dash_scan_value.pack(anchor="w", pady=(14, 0))
-        self.dash_scan_sub = tk.Label(scan_card.body, text="", font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD,
+        self.dash_scan_sub = tk.Label(scan_card.body, text="", font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD,
                                       justify="left", anchor="w")
         self.dash_scan_sub.pack(anchor="w", fill="x")
 
         rtp_card = RoundedCard(cards, command=lambda: self._show_page("protection"))
         rtp_card.grid(row=0, column=1, sticky="nsew", padx=9)
         self._card_header(rtp_card.body, "shield", t("card_protection"))
-        value_row = tk.Frame(rtp_card.body, bg=CARD)
+        value_row = tk.Frame(rtp_card.body, bg=C.CARD)
         value_row.pack(fill="x", pady=(14, 0))
-        self.dash_rtp_value = tk.Label(value_row, text="—", font=FONT_LARGE, fg=TEXT, bg=CARD)
+        self.dash_rtp_value = tk.Label(value_row, text="—", font=FONT_LARGE, fg=C.TEXT, bg=C.CARD)
         self.dash_rtp_value.pack(side="left")
         self.dash_switch = ToggleSwitch(value_row, command=self._toggle_protection)
         self.dash_switch.pack(side="right")
-        self.dash_rtp_sub = tk.Label(rtp_card.body, text="", font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD)
+        self.dash_rtp_sub = tk.Label(rtp_card.body, text="", font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD)
         self.dash_rtp_sub.pack(anchor="w")
 
         q_card = RoundedCard(cards, command=lambda: self._show_page("quarantine"))
         q_card.grid(row=0, column=2, sticky="nsew", padx=(9, 0))
         self._card_header(q_card.body, "lock", t("card_quarantine"))
-        self.dash_q_value = tk.Label(q_card.body, text="", font=FONT_LARGE, fg=TEXT, bg=CARD)
+        self.dash_q_value = tk.Label(q_card.body, text="", font=FONT_LARGE, fg=C.TEXT, bg=C.CARD)
         self.dash_q_value.pack(anchor="w", pady=(14, 0))
         q_sub = tk.Label(q_card.body, text=t("isolated_cant_run"), font=FONT_SMALL,
-                         fg=TEXT_MUTED, bg=CARD, justify="left", anchor="w")
+                         fg=C.TEXT_MUTED, bg=C.CARD, justify="left", anchor="w")
         q_sub.pack(anchor="w", fill="x")
 
         # Card text can wrap in longer languages; keep it inside each card.
@@ -288,20 +300,20 @@ class App(tk.Tk):
 
         recent = RoundedCard(page, radius=16, padx=22, pady=16)
         recent.pack(fill="both", expand=True, pady=(18, 0))
-        head = tk.Frame(recent.body, bg=CARD)
+        head = tk.Frame(recent.body, bg=C.CARD)
         head.pack(fill="x")
-        tk.Label(head, text=t("recent_detections"), font=FONT_BOLD, fg=TEXT, bg=CARD).pack(side="left")
-        see_all = tk.Label(head, text=t("see_all"), font=FONT_SMALL, fg=ACCENT, bg=CARD, cursor="hand2")
+        tk.Label(head, text=t("recent_detections"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
+        see_all = tk.Label(head, text=t("see_all"), font=FONT_SMALL, fg=C.ACCENT, bg=C.CARD, cursor="hand2")
         see_all.pack(side="right")
         see_all.bind("<Button-1>", lambda e: self._show_page("activity"))
-        self.recent_list = tk.Frame(recent.body, bg=CARD)
+        self.recent_list = tk.Frame(recent.body, bg=C.CARD)
         self.recent_list.pack(fill="both", expand=True, pady=(8, 0))
 
-        footer = tk.Frame(page, bg=BG)
+        footer = tk.Frame(page, bg=C.BG)
         footer.pack(fill="x", pady=(12, 0))
-        self.dash_footer = tk.Label(footer, text="", font=FONT_SMALL, fg=TEXT_MUTED, bg=BG)
+        self.dash_footer = tk.Label(footer, text="", font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.BG)
         self.dash_footer.pack(side="left")
-        self.update_link = tk.Label(footer, text=t("update_now"), font=FONT_SMALL, fg=ACCENT, bg=BG,
+        self.update_link = tk.Label(footer, text=t("update_now"), font=FONT_SMALL, fg=C.ACCENT, bg=C.BG,
                                     cursor="hand2")
         self.update_link.bind("<Button-1>", lambda e: self._start_intel_update())
         if not getattr(self, "_updating", False):
@@ -318,29 +330,29 @@ class App(tk.Tk):
                 rows.append(r)
         rows = rows[:4]
         if not rows:
-            icon_label(self.recent_list, "check", 18, fg=GOOD).pack(pady=(18, 6))
+            icon_label(self.recent_list, "check", 18, fg=C.GOOD).pack(pady=(18, 6))
             tk.Label(self.recent_list, text=t("no_recent_threats"), font=FONT,
-                     fg=TEXT_MUTED, bg=CARD).pack()
+                     fg=C.TEXT_MUTED, bg=C.CARD).pack()
             return
         for path, verdict, detail, when in rows:
             is_threat = verdict == "signature_match"
-            row = tk.Frame(self.recent_list, bg=CARD)
+            row = tk.Frame(self.recent_list, bg=C.CARD)
             row.pack(fill="x", pady=5)
-            icon_label(row, "warning", 13, fg=BAD if is_threat else WARN).pack(side="left", padx=(0, 12))
-            tk.Label(row, text=Path(path).name, font=FONT_BOLD, fg=TEXT, bg=CARD).pack(side="left")
-            tk.Label(row, text=clip(detail, 44), font=FONT_SMALL, fg=TEXT_MUTED,
-                     bg=CARD).pack(side="left", padx=(10, 0))
-            tk.Label(row, text=format_time(when), font=FONT_SMALL, fg=TEXT_MUTED,
-                     bg=CARD).pack(side="right")
+            icon_label(row, "warning", 13, fg=C.BAD if is_threat else C.WARN).pack(side="left", padx=(0, 12))
+            tk.Label(row, text=Path(path).name, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
+            tk.Label(row, text=clip(detail, 44), font=FONT_SMALL, fg=C.TEXT_MUTED,
+                     bg=C.CARD).pack(side="left", padx=(10, 0))
+            tk.Label(row, text=format_time(when), font=FONT_SMALL, fg=C.TEXT_MUTED,
+                     bg=C.CARD).pack(side="right")
 
     def _card_header(self, body, icon, title):
-        row = tk.Frame(body, bg=CARD)
+        row = tk.Frame(body, bg=C.CARD)
         row.pack(fill="x")
-        badge = tk.Frame(row, bg=BORDER, width=34, height=34)
+        badge = tk.Frame(row, bg=C.BORDER, width=34, height=34)
         badge.pack(side="left")
         badge.pack_propagate(False)
-        icon_label(badge, icon, 14, fg=ACCENT, bg=BORDER).pack(expand=True)
-        tk.Label(row, text=title, font=FONT_BOLD, fg=TEXT, bg=CARD).pack(side="left", padx=(12, 0))
+        icon_label(badge, icon, 14, fg=C.ACCENT, bg=C.BORDER).pack(expand=True)
+        tk.Label(row, text=title, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left", padx=(12, 0))
         return row
 
     def _refresh_dashboard(self):
@@ -368,16 +380,16 @@ class App(tk.Tk):
             age = i18n.relative(info["updated"].astimezone())
             self.dash_footer.configure(
                 text=t("intel_summary", hashes=number(info["hashes"]), rules=number(info["rules"]),
-                       when=age[0].lower() + age[1:]), fg=TEXT_MUTED)
+                       when=age[0].lower() + age[1:]), fg=C.TEXT_MUTED)
         else:
-            self.dash_footer.configure(text=t("intel_missing"), fg=WARN)
+            self.dash_footer.configure(text=t("intel_missing"), fg=C.WARN)
 
     def _start_intel_update(self):
         if self._updating:
             return
         self._updating = True
         self.update_link.pack_forget()
-        self.dash_footer.configure(text=t("intel_starting"), fg=TEXT_MUTED)
+        self.dash_footer.configure(text=t("intel_starting"), fg=C.TEXT_MUTED)
 
         def work():
             try:
@@ -392,13 +404,13 @@ class App(tk.Tk):
         self._updating = False
         self.update_link.pack(side="left", padx=(10, 0))
         if isinstance(result, Exception):
-            self.dash_footer.configure(text=t("intel_failed", error=result), fg=BAD)
+            self.dash_footer.configure(text=t("intel_failed", error=result), fg=C.BAD)
         else:
             self._refresh_intel_footer()
 
     # ---------------------------------------------------------------- scan --
     def _build_scan_page(self):
-        page = tk.Frame(self.content, bg=BG)
+        page = tk.Frame(self.content, bg=C.BG)
         self.pages["scan"] = page
         page_header(page, t("scanner_title"), t("scanner_sub"))
 
@@ -406,47 +418,48 @@ class App(tk.Tk):
         card.pack(fill="x")
         self.scan_ring = Ring(card.body, size=150)
         self.scan_ring.pack(side="left")
-        self.scan_ring.show(BORDER, glyph="scan", glyph_color=TEXT_MUTED)
-        right = tk.Frame(card.body, bg=CARD)
+        self.scan_ring.show(C.BORDER, glyph="scan", glyph_color=C.TEXT_MUTED)
+        right = tk.Frame(card.body, bg=C.CARD)
         right.pack(side="left", fill="x", expand=True, padx=(30, 0))
 
-        tk.Label(right, text=t("what_to_scan"), font=FONT_LARGE, fg=TEXT, bg=CARD).pack(anchor="w")
-        chips = tk.Frame(right, bg=CARD)
+        tk.Label(right, text=t("what_to_scan"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        chips = tk.Frame(right, bg=C.CARD)
         chips.pack(anchor="w", pady=(12, 8))
         self.scan_target = tk.StringVar(value=default_watch_path())
         self._chips = {}
         for key, label in (("downloads", "folder_downloads"), ("desktop", "folder_desktop"),
                            ("documents", "folder_documents")):
             folder = str(paths.known_folder(key))
-            chip = RoundedCard(chips, bg=BORDER, outer=CARD, radius=8, padx=14, pady=7,
-                               hover_bg=CARD_HOVER, command=lambda f=folder: self._pick_target(f))
-            tk.Label(chip.body, text=t(label), font=FONT, fg=TEXT, bg=BORDER).pack()
+            chip = RoundedCard(chips, bg=C.BORDER, outer=C.CARD, radius=8, padx=14, pady=7,
+                               hover_bg=C.CARD_HOVER, command=lambda f=folder: self._pick_target(f))
+            chip.label = tk.Label(chip.body, text=t(label), font=FONT, fg=C.TEXT, bg=C.BORDER)
+            chip.label.pack()
             chip.pack(side="left", padx=(0, 8))
             self._chips[folder] = chip
-        other = RoundedCard(chips, bg=BORDER, outer=CARD, radius=8, padx=14, pady=7,
-                            hover_bg=CARD_HOVER, command=self._browse_scan_path)
-        tk.Label(other.body, text=t("choose_folder"), font=FONT, fg=TEXT, bg=BORDER).pack()
+        other = RoundedCard(chips, bg=C.BORDER, outer=C.CARD, radius=8, padx=14, pady=7,
+                            hover_bg=C.CARD_HOVER, command=self._browse_scan_path)
+        tk.Label(other.body, text=t("choose_folder"), font=FONT, fg=C.TEXT, bg=C.BORDER).pack()
         other.pack(side="left")
-        self.scan_target_label = tk.Label(right, text="", font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD)
+        self.scan_target_label = tk.Label(right, text="", font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD)
         self.scan_target_label.pack(anchor="w", pady=(0, 16))
 
-        action = tk.Frame(right, bg=CARD)
+        action = tk.Frame(right, bg=C.CARD)
         action.pack(anchor="w")
         self.scan_btn = ttk.Button(action, text=t("scan_now"), style="Hero.TButton", command=self._start_scan)
         self.scan_btn.pack(side="left")
-        self.scan_status = tk.Label(action, text="", font=FONT, fg=TEXT_MUTED, bg=CARD)
+        self.scan_status = tk.Label(action, text="", font=FONT, fg=C.TEXT_MUTED, bg=C.CARD)
         self.scan_status.pack(side="left", padx=(16, 0))
         self._pick_target(self.scan_target.get())
 
         results = RoundedCard(page, radius=16, padx=22, pady=18)
         results.pack(fill="both", expand=True, pady=(16, 0))
-        head = tk.Frame(results.body, bg=CARD)
+        head = tk.Frame(results.body, bg=C.CARD)
         head.pack(fill="x", pady=(0, 8))
-        tk.Label(head, text=t("results"), font=FONT_BOLD, fg=TEXT, bg=CARD).pack(side="left")
+        tk.Label(head, text=t("results"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
         ttk.Button(head, text=t("quarantine_selected"), style="Danger.TButton",
                    command=self._quarantine_selected_scan_results).pack(side="right")
 
-        table = tk.Frame(results.body, bg=CARD)
+        table = tk.Frame(results.body, bg=C.CARD)
         table.pack(fill="both", expand=True)
         self.scan_tree = ttk.Treeview(table, columns=("file", "verdict", "detail"),
                                       show="headings", selectmode="extended")
@@ -455,9 +468,9 @@ class App(tk.Tk):
             self.scan_tree.heading(col, text=t(label), anchor="w")
             self.scan_tree.column(col, width=width, anchor="w", stretch=col == "file")
         self.scan_tree.pack(fill="both", expand=True)
-        self.scan_tree.tag_configure("threat", foreground=BAD)
-        self.scan_tree.tag_configure("suspicious", foreground=WARN)
-        self.scan_tree.tag_configure("skipped", foreground=TEXT_MUTED)
+        self.scan_tree.tag_configure("threat", foreground=C.BAD)
+        self.scan_tree.tag_configure("suspicious", foreground=C.WARN)
+        self.scan_tree.tag_configure("skipped", foreground=C.TEXT_MUTED)
         self.scan_empty = EmptyState(table, "scan", t("scan_empty_title"), t("scan_empty_msg"))
         self.scan_empty.show()
         self._scan_result_map = {}
@@ -465,7 +478,9 @@ class App(tk.Tk):
     def _pick_target(self, folder):
         self.scan_target.set(folder)
         for path, chip in self._chips.items():
-            chip.set_rest(ACCENT_DARK if path == folder else BORDER)
+            selected = path == folder
+            chip.set_rest(C.ACCENT_DARK if selected else C.BORDER)
+            chip.label.configure(fg=C.ON_ACCENT if selected else C.TEXT)
         self.scan_target_label.configure(text=shorten(folder, 80))
 
     def _browse_scan_path(self):
@@ -489,7 +504,7 @@ class App(tk.Tk):
         self.scan_empty.hide()
         self.scan_btn.configure(state="disabled", text=t("scanning_btn"))
         self.scan_ring.spin("0", t("files_checked"))
-        self.scan_status.configure(text=t("scanning_folder", name=target.name or target), fg=TEXT_MUTED)
+        self.scan_status.configure(text=t("scanning_folder", name=target.name or target), fg=C.TEXT_MUTED)
         threading.Thread(target=self._scan_worker, args=(target,), daemon=True).start()
 
     def _scan_worker(self, target: Path):
@@ -528,11 +543,11 @@ class App(tk.Tk):
         self._scanning = False
         self.scan_btn.configure(state="normal", text=t("scan_now"))
         if flagged:
-            self.scan_ring.show(BAD, glyph="warning", text=t("ring_flagged", n=number(flagged)))
-            self.scan_status.configure(text=plural("found_items", flagged, files=number(total)), fg=BAD)
+            self.scan_ring.show(C.BAD, glyph="warning", text=t("ring_flagged", n=number(flagged)))
+            self.scan_status.configure(text=plural("found_items", flagged, files=number(total)), fg=C.BAD)
         else:
-            self.scan_ring.show(GOOD, glyph="check", text=t("ring_no_threats"))
-            self.scan_status.configure(text=t("no_threats_in", files=number(total)), fg=GOOD)
+            self.scan_ring.show(C.GOOD, glyph="check", text=t("ring_no_threats"))
+            self.scan_status.configure(text=t("no_threats_in", files=number(total)), fg=C.GOOD)
             if not self.scan_tree.get_children():
                 self.scan_empty.show(t("no_threats_title"),
                                      t("checked_files_in", files=number(total), path=shorten(str(target), 60)))
@@ -560,38 +575,38 @@ class App(tk.Tk):
 
     # --------------------------------------------------------- protection --
     def _build_protection_page(self):
-        page = tk.Frame(self.content, bg=BG)
+        page = tk.Frame(self.content, bg=C.BG)
         self.pages["protection"] = page
         page_header(page, t("rtp_page_title"), t("rtp_page_sub"))
 
         main = RoundedCard(page, radius=16, padx=24, pady=16)
         main.pack(fill="x")
-        top = tk.Frame(main.body, bg=CARD)
+        top = tk.Frame(main.body, bg=C.CARD)
         top.pack(fill="x")
-        self.rtp_icon = icon_label(top, "shield", 26, fg=BAD)
+        self.rtp_icon = icon_label(top, "shield", 26, fg=C.BAD)
         self.rtp_icon.pack(side="left", padx=(0, 16))
-        col = tk.Frame(top, bg=CARD)
+        col = tk.Frame(top, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
-        self.rtp_title = tk.Label(col, text=t("rtp_page_title"), font=FONT_LARGE, fg=TEXT, bg=CARD)
+        self.rtp_title = tk.Label(col, text=t("rtp_page_title"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD)
         self.rtp_title.pack(anchor="w")
-        self.rtp_sub = tk.Label(col, text="", font=FONT, fg=TEXT_MUTED, bg=CARD)
+        self.rtp_sub = tk.Label(col, text="", font=FONT, fg=C.TEXT_MUTED, bg=C.CARD)
         self.rtp_sub.pack(anchor="w")
         self.rtp_switch = ToggleSwitch(top, command=self._toggle_protection)
         self.rtp_switch.pack(side="right")
 
-        tk.Frame(main.body, bg=BORDER, height=1).pack(fill="x", pady=12)
-        startup = tk.Frame(main.body, bg=CARD)
+        tk.Frame(main.body, bg=C.BORDER, height=1).pack(fill="x", pady=12)
+        startup = tk.Frame(main.body, bg=C.CARD)
         startup.pack(fill="x")
         # The switch is packed first so longer translations wrap instead of covering it.
         self.autostart_switch = ToggleSwitch(startup, command=self._on_autostart_toggled,
                                              on=autostart.is_enabled())
         self.autostart_switch.pack(side="right", padx=(12, 0))
         self.autostart_switch.set_enabled(autostart.supported())
-        tk.Label(startup, text=t("start_with_windows"), font=FONT_BOLD, fg=TEXT, bg=CARD).pack(side="left")
+        tk.Label(startup, text=t("start_with_windows"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
         startup_text = t("start_with_windows_desc")
         if not autostart.supported():
             startup_text += t("installed_only")
-        startup_desc = tk.Label(startup, text=startup_text, font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD,
+        startup_desc = tk.Label(startup, text=startup_text, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD,
                                 justify="left", anchor="w")
         startup_desc.pack(side="left", fill="x", expand=True, padx=(10, 0))
         startup_desc.bind("<Configure>", lambda e: startup_desc.configure(wraplength=max(120, e.width - 4)))
@@ -606,37 +621,37 @@ class App(tk.Tk):
 
         log_card = RoundedCard(page, radius=16, padx=20, pady=14)
         log_card.pack(fill="both", expand=True, pady=(12, 0))
-        tk.Label(log_card.body, text=t("live_activity"), font=FONT_BOLD, fg=TEXT, bg=CARD).pack(anchor="w")
+        tk.Label(log_card.body, text=t("live_activity"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
         self.protection_log = tk.Text(
-            log_card.body, bg=CARD, fg=TEXT_MUTED, insertbackground=TEXT, relief="flat",
+            log_card.body, bg=C.CARD, fg=C.TEXT_MUTED, insertbackground=C.TEXT, relief="flat",
             font=FONT_MONO, wrap="word", height=6, bd=0, highlightthickness=0,
         )
         self.protection_log.pack(fill="both", expand=True, pady=(8, 0))
         self.protection_log.configure(state="disabled")
-        self.protection_log.tag_configure("threat", foreground=BAD)
-        self.protection_log.tag_configure("warn", foreground=WARN)
-        self.protection_log.tag_configure("info", foreground=TEXT)
+        self.protection_log.tag_configure("threat", foreground=C.BAD)
+        self.protection_log.tag_configure("warn", foreground=C.WARN)
+        self.protection_log.tag_configure("info", foreground=C.TEXT)
 
     def _layer_row(self, body, icon, title, desc, change=False, last=False):
-        row = tk.Frame(body, bg=CARD)
+        row = tk.Frame(body, bg=C.CARD)
         row.pack(fill="x", pady=8)
-        icon_label(row, icon, 16, fg=ACCENT).pack(side="left", padx=(0, 16))
+        icon_label(row, icon, 16, fg=C.ACCENT).pack(side="left", padx=(0, 16))
         status = pill(row)
         status.pack(side="right")
         self.layer_pills.append(status)
         if change:
             ttk.Button(row, text=t("change_folder"), style="Ghost.TButton",
                        command=self._change_watch_folder).pack(side="right", padx=(0, 12))
-        col = tk.Frame(row, bg=CARD)
+        col = tk.Frame(row, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
-        tk.Label(col, text=title, font=FONT_BOLD, fg=TEXT, bg=CARD).pack(anchor="w")
-        desc_label = tk.Label(col, text=desc, font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD,
+        tk.Label(col, text=title, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        desc_label = tk.Label(col, text=desc, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD,
                               justify="left", anchor="w")
         desc_label.pack(anchor="w", fill="x")
         # Longer languages wrap instead of pushing the status pill off the card.
         col.bind("<Configure>", lambda e: desc_label.configure(wraplength=max(150, e.width - 4)))
         if not last:
-            tk.Frame(body, bg=BORDER, height=1).pack(fill="x")
+            tk.Frame(body, bg=C.BORDER, height=1).pack(fill="x")
         return desc_label
 
     def _change_watch_folder(self):
@@ -676,7 +691,7 @@ class App(tk.Tk):
     def _set_protection_indicator(self, on: bool):
         self.protection_on = on
         self._transitioning = False
-        color = GOOD if on else BAD
+        color = C.GOOD if on else C.BAD
         folder = Path(self.watch_path).name or self.watch_path
 
         self.side_status_icon.configure(fg=color)
@@ -685,7 +700,7 @@ class App(tk.Tk):
 
         self.hero_ring.show(color, image=self._logo_big)
         self.hero_title.configure(text=t("hero_on_title") if on else t("hero_off_title"),
-                                  fg=TEXT if on else BAD)
+                                  fg=C.TEXT if on else C.BAD)
         self.hero_sub.configure(text=t("hero_on_sub", folder=folder) if on else t("hero_off_sub"))
         if on:
             self.hero_protect_btn.pack_forget()
@@ -695,7 +710,7 @@ class App(tk.Tk):
         for switch in (self.dash_switch, self.rtp_switch):
             switch.set(on)
             switch.set_enabled(True)
-        self.dash_rtp_value.configure(text=t("on") if on else t("off"), fg=GOOD if on else BAD)
+        self.dash_rtp_value.configure(text=t("on") if on else t("off"), fg=C.GOOD if on else C.BAD)
         self.rtp_icon.configure(fg=color)
         self.rtp_title.configure(text=t("rtp_on_title") if on else t("rtp_off_title"))
         for p in self.layer_pills:
@@ -762,7 +777,7 @@ class App(tk.Tk):
     def _table_card(self, page, columns, empty):
         card = RoundedCard(page, radius=16, padx=22, pady=16)
         card.pack(fill="both", expand=True)
-        table = tk.Frame(card.body, bg=CARD)
+        table = tk.Frame(card.body, bg=C.CARD)
         table.pack(fill="both", expand=True)
         tree = ttk.Treeview(table, columns=[c[0] for c in columns], show="headings")
         for i, (col, label, width) in enumerate(columns):
@@ -770,14 +785,14 @@ class App(tk.Tk):
             # Only the first (file) column stretches, so the rest never get pushed off-screen.
             tree.column(col, width=width, minwidth=width if i else 120, anchor="w", stretch=i == 0)
         tree.pack(fill="both", expand=True)
-        tree.tag_configure("threat", foreground=BAD)
-        tree.tag_configure("suspicious", foreground=WARN)
-        tree.tag_configure("muted", foreground=TEXT_MUTED)
+        tree.tag_configure("threat", foreground=C.BAD)
+        tree.tag_configure("suspicious", foreground=C.WARN)
+        tree.tag_configure("muted", foreground=C.TEXT_MUTED)
         icon, title, message = empty
         return tree, EmptyState(table, icon, t(title), t(message))
 
     def _build_quarantine_page(self):
-        page = tk.Frame(self.content, bg=BG)
+        page = tk.Frame(self.content, bg=C.BG)
         self.pages["quarantine"] = page
         page_header(page, t("quarantine_title"), t("quarantine_sub"))
 
@@ -787,7 +802,7 @@ class App(tk.Tk):
             ("lock", "quarantine_empty_title", "quarantine_empty_msg"),
         )
         self.q_tree.configure(selectmode="browse")
-        btn_row = tk.Frame(page, bg=BG)
+        btn_row = tk.Frame(page, bg=C.BG)
         btn_row.pack(fill="x", pady=(14, 0))
         ttk.Button(btn_row, text=t("restore"), style="Ghost.TButton",
                    command=self._restore_selected_quarantine).pack(side="left")
@@ -823,7 +838,7 @@ class App(tk.Tk):
 
     # ----------------------------------------------------------- activity --
     def _build_activity_page(self):
-        page = tk.Frame(self.content, bg=BG)
+        page = tk.Frame(self.content, bg=C.BG)
         self.pages["activity"] = page
         page_header(page, t("history_title"), t("history_sub"))
         self.activity_tree, self.activity_empty = self._table_card(
@@ -845,64 +860,268 @@ class App(tk.Tk):
                                                          format_time(when)), tags=(tag,))
         self.activity_empty.show() if not rows else self.activity_empty.hide()
 
+    # ------------------------------------------------------------ updates --
+    def _build_updates_page(self):
+        page = tk.Frame(self.content, bg=C.BG)
+        self.pages["updates"] = page
+        page_header(page, t("updates_title"), t("updates_sub"))
+
+        card = RoundedCard(page, radius=16, padx=24, pady=20)
+        card.pack(fill="x")
+        top = tk.Frame(card.body, bg=C.CARD)
+        top.pack(fill="x")
+        self.upd_icon = icon_label(top, "cloud", 26, fg=C.ACCENT)
+        self.upd_icon.pack(side="left", padx=(0, 16))
+        buttons = tk.Frame(top, bg=C.CARD)
+        buttons.pack(side="right")
+        self.upd_action_btn = ttk.Button(buttons, text=t("install_update"), style="Accent.TButton",
+                                         command=self._start_app_update)
+        self.upd_check_btn = ttk.Button(buttons, text=t("check_again"), style="Ghost.TButton",
+                                        command=self._check_for_updates)
+        col = tk.Frame(top, bg=C.CARD)
+        col.pack(side="left", fill="x", expand=True)
+        self.upd_title = tk.Label(col, text="", font=FONT_LARGE, fg=C.TEXT, bg=C.CARD, justify="left", anchor="w")
+        self.upd_title.pack(anchor="w", fill="x")
+        self.upd_sub = tk.Label(col, text="", font=FONT, fg=C.TEXT_MUTED, bg=C.CARD, justify="left", anchor="w")
+        self.upd_sub.pack(anchor="w", fill="x")
+        col.bind("<Configure>", lambda e: self.upd_sub.configure(wraplength=max(200, e.width - 4)))
+
+        self.upd_progress_row = tk.Frame(card.body, bg=C.CARD)
+        self.upd_progress = ttk.Progressbar(self.upd_progress_row, mode="determinate", maximum=100)
+        self.upd_progress.pack(fill="x", pady=(16, 4))
+        self.upd_progress_label = tk.Label(self.upd_progress_row, text="", font=FONT_SMALL,
+                                           fg=C.TEXT_MUTED, bg=C.CARD)
+        self.upd_progress_label.pack(anchor="w")
+        tk.Label(card.body, text=t("installed_version", version=VERSION), font=FONT_SMALL,
+                 fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w", pady=(14, 0))
+
+        self.upd_notes_card = RoundedCard(page, radius=16, padx=22, pady=16)
+        self.upd_notes_title = tk.Label(self.upd_notes_card.body, text="", font=FONT_BOLD, fg=C.TEXT, bg=C.CARD)
+        self.upd_notes_title.pack(anchor="w")
+        self.upd_notes = tk.Text(self.upd_notes_card.body, bg=C.CARD, fg=C.TEXT_MUTED, relief="flat", bd=0,
+                                 highlightthickness=0, font=FONT, wrap="word", height=8)
+        self.upd_notes.pack(fill="both", expand=True, pady=(8, 0))
+
+    @staticmethod
+    def _plain_notes(markdown: str) -> str:
+        """Release notes are Markdown; show them as readable plain text."""
+        text = re.sub(r"`{3}.*?`{3}", "", markdown, flags=re.S)       # code blocks (checksums)
+        text = re.sub(r"^#+\s*", "", text, flags=re.M)                 # headings
+        text = text.replace("**", "").replace("`", "")
+        text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)          # links -> their text
+        text = re.sub(r"^(\s*)- ", r"\1• ", text, flags=re.M)
+        return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+    def _render_update_state(self):
+        u = self._update
+        state, release = u["state"], u["release"]
+        self.upd_action_btn.pack_forget()
+        self.upd_check_btn.pack_forget()
+        self.upd_progress_row.pack_forget()
+        self.upd_notes_card.pack_forget()
+        self.nav["updates"].set_badge(state == "available")
+
+        if state == "checking":
+            self.upd_icon.configure(fg=C.TEXT_MUTED)
+            self.upd_title.configure(text=t("checking_updates"), fg=C.TEXT)
+            self.upd_sub.configure(text="")
+        elif state == "current":
+            self.upd_icon.configure(fg=C.GOOD)
+            self.upd_title.configure(text=t("up_to_date"), fg=C.TEXT)
+            self.upd_sub.configure(text=t("up_to_date_sub", version=VERSION))
+            self.upd_check_btn.pack(side="left")
+        elif state == "error":
+            self.upd_icon.configure(fg=C.WARN)
+            self.upd_title.configure(text=t("update_check_failed"), fg=C.TEXT)
+            self.upd_sub.configure(text=str(u["error"]))
+            self.upd_check_btn.pack(side="left")
+        elif state in ("available", "downloading", "installing", "failed"):
+            self.upd_icon.configure(fg=C.ACCENT)
+            self.upd_title.configure(text=t("update_available", version=release.version), fg=C.TEXT)
+            if not app_update.can_self_update():
+                self.upd_sub.configure(text=t("update_from_source"))
+                self.upd_action_btn.configure(text=t("open_release_page"), state="normal")
+                self.upd_action_btn.pack(side="left")
+            else:
+                sub = t("update_available_sub", current=VERSION)
+                if state == "failed":
+                    sub = t("update_failed", error=u["error"])
+                self.upd_sub.configure(text=sub, fg=C.BAD if state == "failed" else C.TEXT_MUTED)
+                busy = state in ("downloading", "installing")
+                self.upd_action_btn.configure(text=t("install_update"), state="disabled" if busy else "normal")
+                self.upd_action_btn.pack(side="left")
+            if state in ("downloading", "installing"):
+                done, total = u["progress"]
+                self.upd_progress.configure(value=100 * done / total if total else 0)
+                self.upd_progress_label.configure(
+                    text=t("installing_update") if state == "installing"
+                    else t("downloading_update", done=number(round(done / 1e6)), total=number(round(total / 1e6))))
+                self.upd_progress_row.pack(fill="x")
+            self.upd_notes_title.configure(text=t("whats_new", version=release.version))
+            self.upd_notes.configure(state="normal")
+            self.upd_notes.delete("1.0", "end")
+            self.upd_notes.insert("1.0", self._plain_notes(release.notes))
+            self.upd_notes.configure(state="disabled")
+            self.upd_notes_card.pack(fill="both", expand=True, pady=(14, 0))
+        if state != "failed":
+            self.upd_sub.configure(fg=C.TEXT_MUTED)
+
+    def _check_for_updates(self):
+        if self._update["state"] in ("downloading", "installing"):
+            return
+        self._update.update(state="checking", error=None)
+        self._render_update_state()
+
+        def work():
+            try:
+                self.event_queue.put(("update_info", app_update.latest_release()))
+            except Exception as e:
+                self.event_queue.put(("update_info", e))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_update_info(self, result):
+        if isinstance(result, Exception):
+            self._update.update(state="error", error=result)
+        elif app_update.is_newer(result.version):
+            self._update.update(state="available", release=result)
+        else:
+            self._update.update(state="current", release=result)
+        self._render_update_state()
+
+    def _start_app_update(self):
+        release = self._update["release"]
+        if not app_update.can_self_update():
+            webbrowser.open(release.page)
+            return
+        self._update.update(state="downloading", progress=(0, release.size))
+        self._render_update_state()
+
+        def work():
+            try:
+                path = app_update.download(
+                    release, lambda done, total: self.event_queue.put(("update_progress", (done, total))))
+                self.event_queue.put(("update_ready", path))
+            except Exception as e:
+                self.event_queue.put(("update_ready", e))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_update_progress(self, payload):
+        self._update["progress"] = payload
+        done, total = payload
+        self.upd_progress.configure(value=100 * done / total if total else 0)
+        self.upd_progress_label.configure(
+            text=t("downloading_update", done=number(round(done / 1e6)), total=number(round(total / 1e6))))
+
+    def _on_update_ready(self, result):
+        if isinstance(result, Exception):
+            self._update.update(state="failed", error=result)
+            self._render_update_state()
+            return
+        self._update["state"] = "installing"
+        self._render_update_state()
+        self.update_idletasks()
+        app_update.launch_installer(result)
+        # Close so the installer can replace this app; it reopens Sentinel when done.
+        self.after(1500, self.destroy)
+
     # ----------------------------------------------------------- settings --
     def _build_settings_page(self):
-        page = tk.Frame(self.content, bg=BG)
+        page = tk.Frame(self.content, bg=C.BG)
         self.pages["settings"] = page
         page_header(page, t("settings_title"), t("settings_sub"))
 
-        lang_card = RoundedCard(page, radius=16, padx=24, pady=20)
-        lang_card.pack(fill="x")
-        head = tk.Frame(lang_card.body, bg=CARD)
-        head.pack(fill="x")
-        icon_label(head, "globe", 18, fg=ACCENT).pack(side="left", padx=(0, 14))
-        col = tk.Frame(head, bg=CARD)
-        col.pack(side="left", fill="x", expand=True)
-        tk.Label(col, text=t("language"), font=FONT_LARGE, fg=TEXT, bg=CARD).pack(anchor="w")
-        tk.Label(col, text=t("language_desc"), font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD).pack(anchor="w")
-
-        options = tk.Frame(lang_card.body, bg=CARD)
-        options.pack(fill="x", pady=(16, 0))
-        for i in range(len(i18n.LANGUAGES)):
-            options.columnconfigure(i, weight=1, uniform="lang")
-        for i, (code, native) in enumerate(i18n.LANGUAGES.items()):
-            selected = code == i18n.current()
-            bg = ACCENT_DARK if selected else BORDER
-            option = RoundedCard(options, bg=bg, outer=CARD, radius=10, padx=14, pady=12,
-                                 hover_bg=CARD_HOVER, command=lambda c=code: self._change_language(c))
-            option.rest_bg = bg
-            option.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 6, 0))
-            tk.Label(option.body, text=native, font=FONT_BOLD, fg=TEXT, bg=bg).pack(anchor="w")
-            tk.Label(option.body, text=i18n.ENGLISH_NAMES[code], font=FONT_SMALL,
-                     fg=TEXT if selected else TEXT_MUTED, bg=bg).pack(anchor="w")
+        theme_choice = self.settings.get("theme", "dark")
+        self._settings_card(page, "settings", t("appearance"), t("appearance_desc"), [
+            (key, t(f"theme_{key}"), t(f"theme_{key}_desc"), key == theme_choice,
+             lambda k=key: self._change_theme(k))
+            for key in C.CHOICES
+        ])
+        self._settings_card(page, "globe", t("language"), t("language_desc"), [
+            (code, native, i18n.ENGLISH_NAMES[code], code == i18n.current(),
+             lambda c=code: self._change_language(c))
+            for code, native in i18n.LANGUAGES.items()
+        ], pady=(14, 0))
 
         about = RoundedCard(page, radius=16, padx=24, pady=18)
         about.pack(fill="x", pady=(14, 0))
-        icon_label(about.body, "info", 18, fg=ACCENT).pack(side="left", padx=(0, 14))
-        col = tk.Frame(about.body, bg=CARD)
+        icon_label(about.body, "info", 18, fg=C.ACCENT).pack(side="left", padx=(0, 14))
+        col = tk.Frame(about.body, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
-        tk.Label(col, text=t("about_version", version=VERSION), font=FONT_BOLD, fg=TEXT, bg=CARD).pack(anchor="w")
-        tk.Label(col, text=t("about_desc"), font=FONT_SMALL, fg=TEXT_MUTED, bg=CARD).pack(anchor="w")
+        tk.Label(col, text=t("about_version", version=VERSION), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        tk.Label(col, text=t("about_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
 
-    def _change_language(self, code):
-        if code == i18n.current():
-            return
-        if self._scanning:
+    def _settings_card(self, page, icon, title, desc, options, pady=(0, 0)):
+        """A card with a row of selectable option tiles: (key, label, sublabel, selected, command)."""
+        card = RoundedCard(page, radius=16, padx=24, pady=20)
+        card.pack(fill="x", pady=pady)
+        head = tk.Frame(card.body, bg=C.CARD)
+        head.pack(fill="x")
+        icon_label(head, icon, 18, fg=C.ACCENT).pack(side="left", padx=(0, 14))
+        col = tk.Frame(head, bg=C.CARD)
+        col.pack(side="left", fill="x", expand=True)
+        tk.Label(col, text=title, font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        tk.Label(col, text=desc, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
+
+        row = tk.Frame(card.body, bg=C.CARD)
+        row.pack(fill="x", pady=(16, 0))
+        for i, (_key, label, sub, selected, command) in enumerate(options):
+            row.columnconfigure(i, weight=1, uniform=title)
+            bg = C.ACCENT_DARK if selected else C.BORDER
+            tile = RoundedCard(row, bg=bg, outer=C.CARD, radius=10, padx=14, pady=12,
+                               hover_bg=C.CARD_HOVER, command=command)
+            tile.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 6, 0))
+            tk.Label(tile.body, text=label, font=FONT_BOLD, fg=C.ON_ACCENT if selected else C.TEXT,
+                     bg=bg).pack(anchor="w")
+            tk.Label(tile.body, text=sub, font=FONT_SMALL, fg=C.ON_ACCENT if selected else C.TEXT_MUTED,
+                     bg=bg).pack(anchor="w")
+
+    def _busy(self) -> bool:
+        if self._scanning or self._update["state"] in ("downloading", "installing"):
             messagebox.showinfo("Sentinel", t("language_busy"))
-            return
-        settings.save(language=code)
-        self.settings = settings.load()
-        i18n.set_language(code)
-        # Rebuild every page in the new language; the background agent picks
-        # the change up by itself from the settings file.
+            return True
+        return False
+
+    def _rebuild(self):
+        """Redraws every page (after a language or theme change), staying on the same page."""
         page = self.current_page
         for child in self.winfo_children():
             child.destroy()
         self.title(t("app_title"))
+        configure_style(self)
+        self.configure(bg=C.BG)
+        C.style_title_bar(self)
         self._build_layout()
         self._show_page(page)
         self.protection_on = None  # forces the status texts to be redrawn
         self._set_protection_indicator(launcher.agent_running())
+
+    def _change_language(self, code):
+        if code == i18n.current() or self._busy():
+            return
+        settings.save(language=code)  # the background agent follows the settings file
+        self.settings = settings.load()
+        i18n.set_language(code)
+        self._rebuild()
+
+    def _change_theme(self, choice):
+        if choice == self.settings.get("theme", "dark") or self._busy():
+            return
+        settings.save(theme=choice)
+        self.settings = settings.load()
+        C.apply(C.resolve(choice))
+        self._rebuild()
+
+    def _follow_windows_theme(self):
+        """In 'Match Windows' mode, switch when the Windows setting changes."""
+        if self.settings.get("theme") == "system" and C.resolve("system") != C.current and not self._busy_quiet():
+            C.apply(C.resolve("system"))
+            self._rebuild()
+        self.after(3000, self._follow_windows_theme)
+
+    def _busy_quiet(self) -> bool:
+        return self._scanning or self._update["state"] in ("downloading", "installing")
 
     # ------------------------------------------------------------- queue --
     def _pump_queue(self):
@@ -921,9 +1140,17 @@ class App(tk.Tk):
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
-                    self.dash_footer.configure(text=t(payload), fg=TEXT_MUTED)
+                    self.dash_footer.configure(text=t(payload), fg=C.TEXT_MUTED)
                 elif kind == "intel_done":
                     self._on_intel_done(payload)
+                elif kind == "update_info":
+                    self._on_update_info(payload)
+                elif kind == "update_progress":
+                    self._on_update_progress(payload)
+                elif kind == "update_ready":
+                    self._on_update_ready(payload)
+                    if self._update["state"] == "installing":
+                        return  # the window is closing
                 processed += 1
         except queue.Empty:
             pass

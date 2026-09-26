@@ -20,7 +20,11 @@ COMPILED_PATH = RULES_DIR / "core.yarc"
 MAX_FILE_SIZE = 32 * 1024 * 1024
 # Media rarely carries executable malware and is often huge; skipping it keeps scans fast.
 SKIP_SUFFIXES = {".mp4", ".mkv", ".avi", ".mov", ".mp3", ".wav", ".flac", ".jpg", ".jpeg",
-                 ".png", ".gif", ".webp", ".heic", ".iso", ".vhd", ".vhdx"}
+                 ".png", ".gif", ".webp", ".heic", ".iso", ".vhd", ".vhdx",
+                 # YARA rule files contain the very strings they hunt for, so
+                 # they'd always "match" themselves (including Sentinel's own).
+                 ".yar", ".yara", ".yarc"}
+COMPILED_RULES_MAGIC = b"YARA"
 THREAT_SCORE = 70  # YARA Forge scores rules 0-100; at/above this we treat a hit as a threat
 DEFAULT_SCORE = 75
 
@@ -73,12 +77,19 @@ def match(path: Path, size: int | None = None) -> list[YaraHit]:
             return []
     if size > MAX_FILE_SIZE:
         return []
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) == COMPILED_RULES_MAGIC:  # compiled rules under another name
+                return []
+    except OSError:
+        return []
     return _run(lambda rules: rules.match(str(path), timeout=30))
 
 
 def match_data(name: str, data: bytes) -> list[YaraHit]:
     """Same as match(), for in-memory content (e.g. a file inside a ZIP)."""
-    if Path(name).suffix.lower() in SKIP_SUFFIXES or len(data) > MAX_FILE_SIZE:
+    if (Path(name).suffix.lower() in SKIP_SUFFIXES or len(data) > MAX_FILE_SIZE
+            or data.startswith(COMPILED_RULES_MAGIC)):
         return []
     return _run(lambda rules: rules.match(data=data, timeout=30))
 

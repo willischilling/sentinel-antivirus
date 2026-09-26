@@ -71,10 +71,20 @@ def configure_style(root: tk.Tk):
                     lightcolor=ACCENT, darkcolor=ACCENT)
 
 
+def _startup_entry_exists() -> bool:
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY) as key:
+            winreg.QueryValueEx(key, REG_RUN_VALUE)
+        return True
+    except FileNotFoundError:
+        return False
+
+
 class SetupWizard(tk.Tk):
-    def __init__(self):
+    def __init__(self, update_mode: bool = False):
         super().__init__()
         i18n.set_language(saved_language())  # a reinstall keeps the language already chosen
+        self.update_mode = update_mode
         self.geometry("500x500")
         self.resizable(False, False)
         self.configure(bg=BG)
@@ -90,7 +100,40 @@ class SetupWizard(tk.Tk):
 
         self.container = ttk.Frame(self, padding=28)
         self.container.pack(fill="both", expand=True)
-        self._build_welcome_page()
+        if update_mode:
+            # Keep whatever the user chose last time; ask nothing.
+            self.desktop_shortcut_var.set((desktop_dir() / f"{APP_NAME}.lnk").exists())
+            self.autostart_var.set(_startup_entry_exists())
+            self._build_update_page()
+            self.after(400, self._run_update)
+        else:
+            self._build_welcome_page()
+
+    def _build_update_page(self):
+        self._clear()
+        self.title(t("setup_title"))
+        self.geometry("500x230")
+        ttk.Label(self.container, text=t("setup_updating_title"), style="Title.TLabel").pack(anchor="w")
+        tk.Label(self.container, text=t("setup_updating_msg", version=VERSION), bg=BG, fg=TEXT_MUTED,
+                 font=FONT, justify="left", wraplength=440).pack(anchor="w", pady=(8, 18))
+        self.status_label = ttk.Label(self.container, text="", style="Muted.TLabel")
+        self.status_label.pack(anchor="w", pady=(0, 6))
+        self.progress = ttk.Progressbar(self.container, mode="indeterminate")
+        self.progress.pack(fill="x")
+        self.progress.start(12)
+
+    def _run_update(self):
+        try:
+            self._do_install()
+        except Exception as e:
+            self.progress.stop()
+            messagebox.showerror(t("setup_title"), t("setup_failed", error=e))
+            self.update_mode = False
+            self.geometry("500x500")
+            self._build_welcome_page()  # fall back to the normal installer so the user can retry
+            return
+        self.launch_after_var.set(True)
+        self._finish()
 
     def _clear(self):
         for child in self.container.winfo_children():
@@ -171,9 +214,12 @@ class SetupWizard(tk.Tk):
             raise RuntimeError(t("setup_err_damaged" if getattr(sys, "frozen", False) else "setup_err_source"))
 
         # An upgrade can't overwrite files the running app has open. This ends
-        # both the window and the background agent (same exe).
+        # both the window and the background agent (same exe), then waits for
+        # Windows to finish tearing them down; killed processes keep their exe
+        # locked for a moment after taskkill returns.
         subprocess.run(["taskkill", "/IM", APP_EXE_NAME, "/F"], capture_output=True, check=False,
                        creationflags=0x08000000)
+        self._wait_for_exit(APP_EXE_NAME)
         app_exe = INSTALL_DIR / APP_SUBDIR / APP_EXE_NAME
         icon = INSTALL_DIR / ICON_NAME
         uninstall_exe = INSTALL_DIR / UNINSTALL_EXE_NAME
@@ -225,13 +271,26 @@ class SetupWizard(tk.Tk):
             raise
 
     @staticmethod
-    def _copy_with_retry(copy, attempts=5):
-        """Files of a just-closed Sentinel can stay locked for a moment."""
-        for attempt in range(attempts):
+    def _wait_for_exit(image_name, timeout=20.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image_name}", "/NH"],
+                                 capture_output=True, text=True, creationflags=0x08000000).stdout
+            if image_name.lower() not in out.lower():
+                return
+            time.sleep(0.5)
+
+    @staticmethod
+    def _copy_with_retry(copy, timeout=20.0):
+        """Files of a just-closed Sentinel (or ones an antivirus is scanning) can
+        stay locked for a moment. copytree reports locked files as shutil.Error,
+        not PermissionError, so retry on any OSError until the timeout."""
+        deadline = time.monotonic() + timeout
+        while True:
             try:
                 return copy()
-            except PermissionError:
-                if attempt == attempts - 1:
+            except (OSError, shutil.Error):
+                if time.monotonic() >= deadline:
                     raise
                 time.sleep(1)
 
@@ -281,4 +340,4 @@ class SetupWizard(tk.Tk):
 
 
 if __name__ == "__main__":
-    SetupWizard().mainloop()
+    SetupWizard(update_mode="--update" in sys.argv).mainloop()

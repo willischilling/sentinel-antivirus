@@ -4,7 +4,8 @@ import tkinter as tk
 from tkinter import ttk
 
 from core.i18n import t
-from theme import BAD, BORDER, CARD, FONT_BOLD, FONT_SMALL, TEXT, TEXT_MUTED
+import theme as C
+from theme import FONT_BOLD, FONT_SMALL
 
 WIDTH = 360
 MARGIN = 16
@@ -34,33 +35,33 @@ class Toast(tk.Toplevel):
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.attributes("-alpha", 0.0)
-        self.configure(bg=BORDER)
+        self.configure(bg=C.BORDER)
 
-        body = tk.Frame(self, bg=CARD)
+        body = tk.Frame(self, bg=C.CARD)
         body.pack(fill="both", expand=True, padx=1, pady=1)
         tk.Frame(body, bg=accent, width=4).pack(side="left", fill="y")
 
-        content = tk.Frame(body, bg=CARD, padx=14, pady=12)
+        content = tk.Frame(body, bg=C.CARD, padx=14, pady=12)
         content.pack(side="left", fill="both", expand=True)
 
-        header = tk.Frame(content, bg=CARD)
+        header = tk.Frame(content, bg=C.CARD)
         header.pack(fill="x")
-        tk.Label(header, text=title, bg=CARD, fg=accent, font=FONT_BOLD).pack(side="left")
-        close = tk.Label(header, text="✕", bg=CARD, fg=TEXT_MUTED, font=FONT_SMALL, cursor="hand2")
+        tk.Label(header, text=title, bg=C.CARD, fg=accent, font=FONT_BOLD).pack(side="left")
+        close = tk.Label(header, text="✕", bg=C.CARD, fg=C.TEXT_MUTED, font=FONT_SMALL, cursor="hand2")
         close.pack(side="right")
         close.bind("<Button-1>", lambda e: self.dismiss())
 
         wrap = WIDTH - 50
         for text, color, font, pady in (
-            (filename, TEXT, FONT_BOLD, (6, 0)),
-            (detail, TEXT_MUTED, FONT_SMALL, (2, 0)),
-            (location, TEXT_MUTED, FONT_SMALL, (0, 0)),
+            (filename, C.TEXT, FONT_BOLD, (6, 0)),
+            (detail, C.TEXT_MUTED, FONT_SMALL, (2, 0)),
+            (location, C.TEXT_MUTED, FONT_SMALL, (0, 0)),
         ):
             if text:
-                tk.Label(content, text=text, bg=CARD, fg=color, font=font, wraplength=wrap,
+                tk.Label(content, text=text, bg=C.CARD, fg=color, font=font, wraplength=wrap,
                          justify="left", anchor="w").pack(fill="x", pady=pady)
 
-        self.button_row = tk.Frame(content, bg=CARD)
+        self.button_row = tk.Frame(content, bg=C.CARD)
         if actions:
             self.button_row.pack(fill="x", pady=(12, 0))
         if auto_close_ms:
@@ -71,7 +72,7 @@ class Toast(tk.Toplevel):
             btn.pack(side="left", padx=(0, 8))
             self.buttons[label] = btn
 
-        self.status = tk.Label(content, text="", bg=CARD, fg=TEXT, font=FONT_SMALL,
+        self.status = tk.Label(content, text="", bg=C.CARD, fg=C.TEXT, font=FONT_SMALL,
                                wraplength=wrap, justify="left", anchor="w")
 
     def _run_action(self, callback, label):
@@ -81,12 +82,12 @@ class Toast(tk.Toplevel):
         except Exception as e:
             if self.on_error:
                 self.on_error(label, e)
-            self._show_status(t("toast_failed", action=label, error=e), BAD, close_after_ms=8000)
+            self._show_status(t("toast_failed", action=label, error=e), C.BAD, close_after_ms=8000)
             return
         if message is None:
             self.dismiss()
         else:
-            self._show_status(message, TEXT, close_after_ms=2500)
+            self._show_status(message, C.TEXT, close_after_ms=2500)
 
     def _show_status(self, message, color, close_after_ms):
         self.button_row.pack_forget()

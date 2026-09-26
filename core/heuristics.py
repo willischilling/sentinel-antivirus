@@ -50,6 +50,15 @@ def shannon_entropy(data: bytes) -> float:
 ENTROPY_SCRIPT_EXTS = {".ps1", ".vbs", ".js", ".bat", ".cmd"}
 ENTROPY_BINARY_EXTS = {".exe", ".dll", ".scr"}
 
+# Suspicious text only matters in something that can run. A database, log or
+# text file that merely contains "powershell -enc" (Sentinel's own scan
+# history, security articles, source code) is harmless. "" = no extension.
+RUNNABLE_EXTS = {
+    "", ".exe", ".dll", ".scr", ".sys", ".com", ".pif", ".cpl", ".ocx", ".msi", ".msp",
+    ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+    ".hta", ".sct", ".lnk", ".jar", ".docm", ".dotm", ".xlsm", ".xltm", ".pptm", ".potm",
+}
+
 
 def check_file(path: Path) -> list[str]:
     try:
@@ -72,12 +81,15 @@ def check_bytes(name: str, data: bytes) -> list[str]:
     if DOUBLE_EXT_RE.search(name):
         hard_flags.append(f"Suspicious double extension: {name}")
 
+    suffix = Path(name).suffix.lower()
+    if suffix not in RUNNABLE_EXTS:
+        return hard_flags
+
     data = data[:SCAN_CHUNK]
     for pattern in SUSPICIOUS_RE:
         if pattern.search(data):
             hard_flags.append(f"Suspicious pattern matched: {pattern.pattern.decode(errors='replace')}")
 
-    suffix = Path(name).suffix.lower()
     if suffix in ENTROPY_SCRIPT_EXTS:
         entropy = shannon_entropy(data[:ENTROPY_SAMPLE])
         if entropy > 6.5:

@@ -20,7 +20,9 @@ Every file goes through these layers, strongest first:
 1. **Known malware fingerprints.** SHA-256 hashes from [MalwareBazaar](https://bazaar.abuse.ch/) (abuse.ch): the full history of over 1.1 million samples, plus a rolling feed of the last 48 hours with malware family names (for example "Mirai (MalwareBazaar)").
 2. **YARA rules.** The [YARA Forge](https://github.com/YARAHQ/yara-forge) "core" rule set (about 5,000 curated rules, chosen for low false positives), which detects whole malware families rather than single files. Rules with a score of 70 or more count as a threat; lower scores count as suspicious.
 3. **Archive contents.** ZIP and JAR are read in memory. 7-Zip, RAR, TAR, CAB and ISO files are listed and extracted with Windows' own Microsoft-signed `tar.exe` (libarchive), so no third-party tools are bundled. Archives inside archives are followed up to two levels deep, across formats.
-4. **Heuristics.** Suspicious strings (encoded PowerShell, process-injection APIs, shadow copy deletion...), double extensions like `invoice.pdf.exe`, and obfuscated scripts.
+4. **Heuristics.** Suspicious strings (encoded PowerShell, process-injection APIs, shadow copy deletion...), double extensions like `invoice.pdf.exe`, and obfuscated scripts. The string checks only apply to files that can actually run (programs, scripts, shortcuts, macro-enabled Office files). A log or document that merely *mentions* `powershell -enc` is harmless.
+
+Sentinel never reports its own files. Its data and quarantine folders are skipped, and YARA isn't run against YARA rule files, since they always contain the very strings they look for.
 
 **Publisher signature check.** Weak signals (heuristics and low-score YARA hits) are dropped for files with a valid Authenticode signature, verified with Windows' own `WinVerifyTrust`. This covers both embedded signatures and the catalog signatures most Windows system files use. A signed file with even one byte changed fails the check. Known-malware fingerprints and strong YARA hits still apply to signed files, since malware is occasionally signed with stolen certificates.
 
@@ -55,6 +57,8 @@ Nothing is ended or deleted without a click.
 - Quarantine: files are moved to an isolated folder and renamed so they can't run, and can be restored or permanently deleted.
 - Detection history.
 - A system tray icon, and an option to start with Windows.
+- **One-click updates:** the Update tab checks GitHub for a newer release. **Update now** downloads the installer, checks it against the SHA-256 GitHub publishes (a file that doesn't match is deleted, never run), and installs it automatically. Your settings are kept and Sentinel reopens by itself. A dot on the tab shows when an update is available.
+- **Light and dark mode:** choose Dark, Light or Match Windows (follows the Windows setting, even when it changes). It switches instantly, and the popups and window title bar follow too.
 - **Five languages:** English, 简体中文 (Chinese), हिन्दी (Hindi), Español and Français. Sentinel starts in your Windows display language when it's one of these. You can change it on the Settings page or in the installer, and the whole app switches instantly: popups, the tray menu, the activity log and the uninstaller too. Dates, times and numbers use each language's local format.
 - Opening Sentinel while it's already running brings up the existing window instead of starting a second copy.
 
@@ -133,7 +137,9 @@ core/
 
 installer/  ── setup wizard, uninstaller, shortcut creation
 widgets.py, theme.py ── custom UI widgets (rounded cards, switches, rings) and colors
-core/i18n.py, core/translations.py ── the 5 languages (about 220 phrases each), plurals and local formats
+core/i18n.py, core/translations.py ── the 5 languages (about 250 phrases each), plurals and local formats
+core/app_update.py ── checks GitHub for new releases, downloads and verifies the installer
+theme.py ── dark and light palettes, swapped live
 ```
 
 Design notes:
