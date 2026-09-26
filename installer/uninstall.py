@@ -103,6 +103,31 @@ def schedule_folder_removal():
                      creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW, close_fds=True)
 
 
+def remove_vpn():
+    """Removes the Sentinel VPN tunnel and its config, if one was set up. That needs
+    administrator rights, so Windows asks once. WireGuard itself is left installed."""
+    import ctypes
+
+    from core import elevate, vpn
+
+    if vpn.status() == "not_setup" and not vpn.PROGRAM_DATA.exists():
+        log("no VPN set up")
+        return
+    parts = []
+    if vpn.WIREGUARD_EXE.exists():
+        parts.append(f'"{vpn.WIREGUARD_EXE}" /uninstalltunnelservice {vpn.TUNNEL}')
+    parts.append(f'rmdir /s /q "{vpn.PROGRAM_DATA}"')
+    info = elevate.SHELLEXECUTEINFOW(cbSize=ctypes.sizeof(elevate.SHELLEXECUTEINFOW),
+                                     fMask=elevate.SEE_MASK_NOCLOSEPROCESS, lpVerb="runas", lpFile="cmd.exe",
+                                     lpParameters="/c " + " & ".join(parts), nShow=0)
+    if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
+        raise RuntimeError(f"admin prompt declined or failed (error {ctypes.GetLastError()})")
+    ctypes.windll.kernel32.WaitForSingleObject(info.hProcess, 60_000)
+    ctypes.windll.kernel32.CloseHandle(info.hProcess)
+    if vpn.status() != "not_setup":
+        raise RuntimeError("the VPN tunnel is still there")
+
+
 def main():
     os.chdir(tempfile.gettempdir())  # never hold the install folder open ourselves
     i18n.set_language(saved_language())  # read before the settings file is deleted
@@ -118,6 +143,7 @@ def main():
     log(f"uninstalling from {INSTALL_DIR}")
     results = [
         step("close running Sentinel", kill_running_app),
+        step("remove VPN tunnel", remove_vpn),
         step("remove shortcuts", remove_shortcuts),
         step("remove start-with-Windows entry", remove_startup_entry),
         step("remove Apps & Features entry", remove_uninstall_entry),

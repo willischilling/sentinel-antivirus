@@ -72,6 +72,16 @@ A chat tab for weird messages, sketchy links and security questions. It works in
 
 Without the AI download, the built-in checks still work on their own.
 
+### Sentinel VPN
+A VPN tab with an on/off switch, the server's location on a world map, and your current public IP.
+
+- **Servers:** it uses [Proton VPN](https://protonvpn.com/)'s free servers (no-logs, based in Switzerland). Make a free Proton account, download a WireGuard config for Windows, and import the `.conf` file. Any other WireGuard config works too.
+- **Engine:** the official [WireGuard for Windows](https://www.wireguard.com/install/). If it's missing, Sentinel downloads the MSI from download.wireguard.com and only installs it after confirming it's signed by *WireGuard LLC*.
+- **One admin prompt, once.** Setup installs WireGuard if needed and stores the config (which holds the tunnel's private key) in `%ProgramData%\Sentinel Antivirus\vpn`, readable only by Windows and administrators. It then creates the tunnel service, set to start only when asked, and gives your Windows account permission to start and stop it. After that the switch works with no prompts.
+- **No leaks:** when the config routes all traffic (`0.0.0.0/0`), WireGuard blocks anything trying to go around the tunnel. Configs that run commands (`PostUp` and similar) are refused.
+- **IP and location:** looked up with [ipwho.is](https://ipwho.is/), which sees only the request itself, the same as any website you visit.
+- **Clean up:** **Remove VPN** in the tab, or uninstalling Sentinel, deletes the tunnel and its config with one admin prompt. WireGuard itself stays installed.
+
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
 - A scanner for Downloads, Desktop, Documents or any folder, with an animated progress ring.
@@ -161,6 +171,7 @@ widgets.py, theme.py ── custom UI widgets (rounded cards, switches, rings) a
 core/i18n.py, core/translations.py ── the 5 languages (about 250 phrases each), plurals and local formats
 core/app_update.py ── checks GitHub for new releases, downloads and verifies the installer
 ask_page.py, core/scam_check.py, core/link_intel.py, core/assistant.py ── Ask Sentinel: chat tab, built-in checks, link lists, local AI
+vpn_page.py, core/vpn.py ── Sentinel VPN: the tab, and WireGuard setup/start/stop
 theme.py ── dark and light palettes, swapped live
 ```
 
@@ -198,6 +209,7 @@ Measured results:
 - YARA rules: [YARA Forge](https://github.com/YARAHQ/yara-forge), which packages rules from many open-source authors under their respective licenses
 - Local AI: [Qwen3 4B](https://huggingface.co/Qwen/Qwen3-4B-GGUF) by the Qwen team (Apache 2.0), run with [llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
 - Link lists: [Phishing.Database](https://github.com/Phishing-Database/Phishing.Database), [URLhaus](https://urlhaus.abuse.ch/), [OpenPhish](https://openphish.com/)
+- VPN: [WireGuard](https://www.wireguard.com/) and [Proton VPN](https://protonvpn.com/) free servers; world map from [Natural Earth](https://www.naturalearthdata.com/) (public domain)
 - Libraries: [yara-python](https://github.com/VirusTotal/yara-python), [watchdog](https://github.com/gorakhargosh/watchdog), [psutil](https://github.com/giampaolo/psutil), [pystray](https://github.com/moses-palmer/pystray), [Pillow](https://python-pillow.org/), [PyInstaller](https://pyinstaller.org/)
 
 Threat data is downloaded at runtime and not redistributed with the app. Only hash lists and rule text are downloaded, never malware samples.

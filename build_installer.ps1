@@ -16,6 +16,7 @@ python -m PyInstaller --noconfirm --onedir --windowed --name Sentinel `
     --add-data "$root\assets\icon.ico;assets" `
     --add-data "$root\assets\icon.png;assets" `
     --add-data "$root\assets\emblem.png;assets" `
+    --add-data "$root\assets\world_dots.png;assets" `
     --distpath "$root\dist" --workpath "$root\build" --specpath "$root\build" `
     "$root\gui.py"
 

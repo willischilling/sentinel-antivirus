@@ -127,6 +127,20 @@ def _perform(action: str, args: list[str]):
         _delete_run_value(args[0], args[1])
     elif action == "taskdel":
         _delete_task(args[0])
+    elif action == "vpnsetup":
+        from . import vpn
+
+        vpn.elevated_setup(args[0], args[1], args[2])
+    elif action == "vpnremove":
+        from . import vpn
+
+        vpn.elevated_remove()
+    elif action in ("vpnstart", "vpnstop"):
+        from . import vpn
+
+        result = vpn._sc("start" if action == "vpnstart" else "stop", vpn.SERVICE)
+        if result.returncode != 0 and not any(code in result.stdout for code in ("1056", "1062")):
+            raise RuntimeError(result.stdout.strip())
     else:
         raise RuntimeError(f"unknown action {action!r}")
 

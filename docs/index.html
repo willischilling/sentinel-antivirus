@@ -229,6 +229,34 @@ footer p { margin: 0; max-width: 70ch; }
 @keyframes blink { 50% { opacity: 0; } }
 @media (max-width: 960px) { .ask-grid { grid-template-columns: 1fr; } .chat-body { min-height: 0; } }
 
+
+/* vpn */
+.vpn-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 56px; align-items: center; }
+.vpn-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: var(--shot-shadow); }
+.vpn-top { display: flex; gap: 14px; align-items: flex-start; }
+.vpn-badge { width: 48px; height: 48px; border-radius: 10px; background: var(--panel); display: grid; place-items: center; color: var(--muted); flex: none; transition: color .3s; }
+.vpn-badge svg { width: 22px; height: 22px; }
+.vpn-card.on .vpn-badge { color: var(--good); }
+.vpn-title { font-weight: 600; font-size: 17px; }
+.vpn-status { font-weight: 600; color: var(--bad); transition: color .3s; }
+.vpn-card.on .vpn-status { color: var(--good); }
+.vpn-switch { margin-left: auto; display: flex; align-items: center; gap: 10px; font: 600 12px "IBM Plex Mono", monospace; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 4px; }
+.vpn-switch .track { width: 46px; height: 26px; border-radius: 13px; background: var(--line); position: relative; transition: background .25s; }
+.vpn-switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .25s; }
+.vpn-card.on .vpn-switch .track { background: var(--accent); }
+.vpn-card.on .vpn-switch .track::after { transform: translateX(20px); }
+.vpn-card.on .vpn-switch { color: var(--good); }
+.vpn-mid { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; margin-top: 18px; }
+.vpn-loc { display: flex; align-items: center; gap: 10px; background: var(--panel); border-radius: 12px; padding: 10px 14px; font-weight: 600; font-size: 14px; }
+.vpn-loc .cc { background: var(--accent-strong); color: #fff; font: 600 11px "IBM Plex Mono", monospace; padding: 3px 7px; border-radius: 4px; }
+.vpn-loc .chg { color: var(--accent); font-weight: 500; margin-left: 14px; }
+.vpn-map { width: 100%; height: auto; }
+.vpn-map circle { fill: color-mix(in srgb, var(--muted) 45%, var(--card)); }
+.vpn-pin { opacity: 0; transition: opacity .4s; }
+.vpn-card.on .vpn-pin { opacity: 1; }
+.vpn-ip { margin-top: 12px; font: 12.5px "IBM Plex Mono", monospace; color: var(--muted); }
+@media (max-width: 960px) { .vpn-grid { grid-template-columns: 1fr; } }
+
 @media (max-width: 960px) {
   .hero .wrap, .split, .install { grid-template-columns: 1fr; }
   .hero { padding-top: 56px; }
@@ -260,6 +288,7 @@ footer p { margin: 0; max-width: 70ch; }
     <a class="brand" href="#"><img src="assets/emblem.png" alt=""><span>SENTINEL</span></a>
     <a class="link" href="#detection">Detection</a>
     <a class="link" href="#ask">Ask Sentinel</a>
+    <a class="link" href="#vpn">VPN</a>
     <a class="link" href="#protection">Protection</a>
     <a class="link" href="#limits">Limits</a>
     <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
@@ -284,7 +313,7 @@ footer p { margin: 0; max-width: 70ch; }
     <div>
       <div class="kicker"><b>●</b> Windows 10 &amp; 11 · free · open source</div>
       <h1>An antivirus,<br>built from <em>scratch.</em></h1>
-      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window. Got a sketchy message? Ask Sentinel checks it with an AI that runs on your own PC.</p>
+      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window. Got a sketchy message? Ask Sentinel checks it with an AI that runs on your own PC. And there's a free VPN built in.</p>
       <div class="cta">
         <a class="btn primary" id="dl" href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
@@ -368,11 +397,42 @@ footer p { margin: 0; max-width: 70ch; }
   </div>
 </section>
 
+<section id="vpn">
+  <div class="wrap vpn-grid">
+    <div>
+      <div class="kicker"><b>03</b> Sentinel VPN</div>
+      <h2>A free VPN, one switch.</h2>
+      <p class="lede" style="margin-top:22px">Sentinel VPN runs on Proton VPN's free, no-logs servers through WireGuard, the open-source VPN engine. Set it up once and the switch just works.</p>
+      <ul class="ask-points">
+        <li><b>Two minutes to set up</b><span>Make a free Proton account, download a WireGuard config, and import it. Sentinel installs WireGuard for you, but only after checking it's really signed by WireGuard LLC.</span></li>
+        <li><b>One admin prompt, ever</b><span>Windows asks once to create the VPN. After that, turning it on and off needs no prompts.</span></li>
+        <li><b>No leaks</b><span>While connected, WireGuard blocks any traffic that tries to go around the tunnel. The config's private key is stored where only Windows can read it.</span></li>
+      </ul>
+    </div>
+    <div class="vpn-card" id="vpn-card">
+      <div class="vpn-top">
+        <div class="vpn-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></svg></div>
+        <div>
+          <div class="vpn-title">Sentinel VPN</div>
+          <div>Your online activity is</div>
+          <div class="vpn-status" id="vpn-status">Potentially exposed</div>
+        </div>
+        <button class="vpn-switch" id="vpn-switch" aria-pressed="false" aria-label="Turn the example VPN on or off"><span class="track"></span><span id="vpn-word">OFF</span></button>
+      </div>
+      <div class="vpn-mid">
+        <div class="vpn-loc"><span class="cc">NL</span>Amsterdam · NL-FREE#12<span class="chg">Change</span></div>
+        <svg class="vpn-map" id="vpn-map" viewBox="0 0 288 104" aria-hidden="true"></svg>
+      </div>
+      <div class="vpn-ip" id="vpn-ip">Your public IP: 203.0.113.24 (your real address)</div>
+    </div>
+  </div>
+</section>
+
 <section id="app">
   <div class="wrap">
     <div class="app-head">
       <div>
-        <div class="kicker"><b>03</b> The app</div>
+        <div class="kicker"><b>04</b> The app</div>
         <h2>Calm when it's quiet.<br>Loud when it matters.</h2>
       </div>
       <div class="seg" role="group" aria-label="App theme">
@@ -394,7 +454,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="protection">
   <div class="wrap">
-    <div class="kicker"><b>04</b> Real-time protection</div>
+    <div class="kicker"><b>05</b> Real-time protection</div>
     <h2>Four watchers.<br>One background agent.</h2>
     <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
 
@@ -425,7 +485,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="languages">
   <div class="wrap">
-    <div class="kicker"><b>05</b> Five languages</div>
+    <div class="kicker"><b>06</b> Five languages</div>
     <h2>Speaks your language.</h2>
     <p class="lede" style="margin-top:22px">Starts in your Windows display language and switches live — popups, tray menu, activity log, installer and uninstaller included. Dates and numbers follow local formats.</p>
     <div class="langs">
@@ -442,7 +502,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="split" style="margin-bottom:0">
       <div>
-        <div class="kicker"><b>06</b> Honest limits</div>
+        <div class="kicker"><b>07</b> Honest limits</div>
         <h2>What it can't do.</h2>
       </div>
       <p class="lede">Sentinel is a portfolio project, not a replacement for Microsoft Defender. Keep Defender on. Here's exactly where the edges are.</p>
@@ -460,7 +520,7 @@ footer p { margin: 0; max-width: 70ch; }
 <section id="install">
   <div class="wrap install">
     <div>
-      <div class="kicker"><b>07</b> Install</div>
+      <div class="kicker"><b>08</b> Install</div>
       <h2>Two minutes,<br>no admin rights.</h2>
       <ol class="steps" style="margin-top:36px">
         <li><div><b>Download SentinelSetup.exe</b><span>From the latest GitHub release. Its SHA-256 is listed in the release notes.</span></div></li>
@@ -672,6 +732,32 @@ document.querySelectorAll("[data-c]").forEach(b => b.addEventListener("click", (
 }));
 new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { showConvo(0); o.disconnect(); } }, { threshold: .3 })
   .observe(chatBody);
+
+// ---- VPN card demo: dotted map from the app's own map data ----
+(function () {
+  const cols = 144, rows = 52, data = atob("AAADxLaAf/8AAAAGAP//YIAAgEAAfG/gH/4AAAAGH///9/gBB///xDswH/gAAf4F6///////9/////w+H8LAB/1/////////Ef////UcHwCAD3/////////+A////+BgDgAAPn////////74AGB//+B+AAACPn///////4CAAIAf//h/AAACFP///////gOAAAAP//7/wAANH////////wMAAAAH////QAADf////////wAAAAAD///04AAD/////////wAAAAAD///9AAAB//Xn/////gAAAAAD///0AAAB6+Dv/////MAAAAAD///gAAAPhv7z////8IAAAAAB//+AAAAPAp/j///+IIAAAAAB///AAAAA8Af/////MwAAAAAAf/8AAAAH8AP/////DAAAAAAAX/4AAAAP/uv/////gAAAAAAAP8EAAAAf///v////gAAAAAAAD4EAAAA////7////AAAAAAAAB4AAAAA///3+H//+gAAAAAAAA4hAAAB///7/D+fgAAAAAAAAA9g4AAB///7+B8PQgAAAAAAAAHwAAAB///94BwHggAAAAAAAAA4AAAB////gAwHwQAAAAAAAAAAoAAA///+QAwFgAAAAAAAAAAP/AAAf///wAIEAIAAAAAAAAAB/gAAPv//wAACCAAAAAAAAAAB/8AAAD//gAAGGAAAAAAAAAAD/8AAAD//AAAGOgAAAAAAAAAD//AAAD/+AAADOjAAAAAAAAAD//4AAD/8AAABAg8AAAAAAAAD//8AAB/8AAAAgAeAAAAAAAAD//8AAB/8AAAAAoIAAAAAAAAB//4AAB/8AAAAAAAAAAAAAAAB//wAAB/8QAAAADAAAAAAAAAAf/wAAB/8wAAAAfsAAAAAAAAAP/wAAB/wwAAAAf+AAAAAAAAAP/wAAB/xgAAAD//AAAAAAAAAP/AAAA/xgAAAH//gAAAAAAAAP+AAAA/gAAAAH//gAAAAAAAAf8AAAAfgAAAAD//gAAAAAAAAf8AAAAfAAAAAD//gAAAAAAAAf4AAAAcAAAAADg/gAAAAAAAAfgAAAAAAAAAAAAPAEAAAAAAAfAAAAAAAAAAAAACACAAAAAAA8AAAAAAAAAAAAACAEAAAAAAAcAAAAAAAAAAAAAAAYAAAAAAA4AAAAAAAAAAAAAAAQAAAAAAA4AAAAAAAAEAAAAAAAAAAAAAAwgAAAAAAAAAAAAAAAAAAAAAAYAAAAAAAAAAAAAAAA"), svg = document.getElementById("vpn-map");
+  const cw = 288 / cols, ch = 104 / rows, ns = "http://www.w3.org/2000/svg";
+  let out = "";
+  for (let i = 0; i < cols * rows; i++) {
+    if (data.charCodeAt(i >> 3) & (128 >> (i & 7))) {
+      out += `<circle cx="${((i % cols) + .5) * cw}" cy="${(Math.floor(i / cols) + .5) * ch}" r="${Math.min(cw, ch) * .36}"/>`;
+    }
+  }
+  const lat = 52.37, lon = 4.9, px = (lon + 180) / 360 * 288, py = (75 - lat) / 131 * 104;
+  out += `<g class="vpn-pin"><circle cx="${px}" cy="${py}" r="7" style="fill:var(--accent);opacity:.25"/>` +
+         `<circle cx="${px}" cy="${py}" r="4" style="fill:var(--accent)"/><circle cx="${px}" cy="${py}" r="1.6" style="fill:var(--card)"/></g>`;
+  svg.innerHTML = out;
+  const card = document.getElementById("vpn-card"), sw = document.getElementById("vpn-switch");
+  sw.addEventListener("click", () => {
+    const on = !card.classList.contains("on");
+    card.classList.toggle("on", on);
+    sw.setAttribute("aria-pressed", on);
+    document.getElementById("vpn-word").textContent = on ? "ON" : "OFF";
+    document.getElementById("vpn-status").textContent = on ? "Protected" : "Potentially exposed";
+    document.getElementById("vpn-ip").textContent = on ? "Your public IP: 198.51.100.7 (Amsterdam, Netherlands)"
+                                                     : "Your public IP: 203.0.113.24 (your real address)";
+  });
+})();
 
 // ---- latest release details from GitHub ----
 fetch("https://api.github.com/repos/willischilling/sentinel-antivirus/releases/latest")

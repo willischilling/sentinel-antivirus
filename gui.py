@@ -24,6 +24,7 @@ import theme as C
 from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE
 from widgets import EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label
 from ask_page import AskPage, ChatState
+from vpn_page import VpnPage, new_state as new_vpn_state
 
 
 def configure_style(root: tk.Tk):
@@ -135,11 +136,13 @@ class App(tk.Tk):
         # App update status, kept outside the widgets so it survives a language rebuild.
         self._update = {"state": "checking", "release": None, "error": None, "progress": (0, 0)}
         self.ask_state = ChatState()  # the Ask Sentinel conversation, also kept across rebuilds
+        self.vpn_state = new_vpn_state()
 
         self._build_layout()
         self._show_page("dashboard")
         self.after(200, self._pump_queue)
         self.after(2500, self._check_for_updates)  # quietly, in the background
+        self.after(3000, self._poll_vpn)
         self.after(60_000, self._unload_idle_ai)
         self.after(3000, self._follow_windows_theme)
 
@@ -150,6 +153,11 @@ class App(tk.Tk):
         elif threat_intel.needs_update():
             self._start_intel_update()  # the agent normally does this, but it isn't running
         self._poll_agent()
+
+    def _poll_vpn(self):
+        if self.current_page == "vpn" and not self.vpn_state["busy"]:
+            self.vpn_page.refresh()  # picks up changes made outside Sentinel too
+        self.after(3000, self._poll_vpn)
 
     def _unload_idle_ai(self):
         assistant.Assistant.unload_if_idle()  # frees ~3 GB of memory a few minutes after the last question
@@ -190,6 +198,7 @@ class App(tk.Tk):
             ("dashboard", "home", "nav_dashboard"),
             ("scan", "scan", "nav_scanner"),
             ("ask", "chat", "nav_ask"),
+            ("vpn", "globe", "nav_vpn"),
             ("protection", "shield", "nav_protection"),
             ("quarantine", "lock", "nav_quarantine"),
             ("activity", "history", "nav_history"),
@@ -221,6 +230,8 @@ class App(tk.Tk):
         self._build_scan_page()
         self.ask_page = AskPage(self.content, self, logo=self._logo_big)
         self.pages["ask"] = self.ask_page
+        self.vpn_page = VpnPage(self.content, self)
+        self.pages["vpn"] = self.vpn_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -1239,6 +1250,8 @@ class App(tk.Tk):
                     self._on_scan_done(payload)
                 elif kind.startswith("ask_"):
                     self.ask_page.handle(kind, payload)
+                elif kind.startswith("vpn_"):
+                    self.vpn_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
