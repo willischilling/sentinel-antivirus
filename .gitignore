@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# PyInstaller output
+build/
+dist/
+*.spec
+
+# Runtime data: threat database (downloaded at runtime), settings, logs, quarantine
+data/
+quarantine/
+
+# Local test samples
+test_files/

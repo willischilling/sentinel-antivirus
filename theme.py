@@ -1,0 +1,20 @@
+BG = "#0b1120"
+PANEL = "#0f172a"
+CARD = "#151f33"
+CARD_HOVER = "#1b2842"
+BORDER = "#24324d"
+TEXT = "#e7ecf5"
+TEXT_MUTED = "#8b97ad"
+ACCENT = "#3b82f6"
+ACCENT_DARK = "#2563eb"
+GOOD = "#22c55e"
+WARN = "#f59e0b"
+BAD = "#ef4444"
+
+FONT = ("Segoe UI", 10)
+FONT_BOLD = ("Segoe UI Semibold", 10)
+FONT_LARGE = ("Segoe UI Semibold", 12)
+FONT_TITLE = ("Segoe UI Semibold", 18)
+FONT_HERO = ("Segoe UI Semibold", 24)
+FONT_SMALL = ("Segoe UI", 9)
+FONT_MONO = ("Consolas", 9)

@@ -1,0 +1,216 @@
+"""Alerts when a program adds itself to Windows startup, a common way for
+malware to survive reboots.
+
+Watches the registry Run/RunOnce keys and Startup folders (every few seconds)
+and Task Scheduler tasks (every few minutes, since listing them is slow).
+Entries that exist when a location is first watched become its baseline;
+anything added later is reported once. Baselines are saved, so entries added
+while Sentinel wasn't running are still caught at next start.
+"""
+import json
+import os
+import shutil
+import subprocess
+import time
+import winreg
+from dataclasses import dataclass
+from pathlib import Path
+
+from core import database, paths
+
+HKCU, HKLM = winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE
+RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_ONCE = r"Software\Microsoft\Windows\CurrentVersion\RunOnce"
+RUN_32 = r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"
+
+# (hive, key, label) for registry locations; folders are listed separately.
+DEFAULT_REG_LOCATIONS = [
+    (HKCU, RUN, "Startup registry (your account)"),
+    (HKCU, RUN_ONCE, "Run-once registry (your account)"),
+    (HKLM, RUN, "Startup registry (all users)"),
+    (HKLM, RUN_ONCE, "Run-once registry (all users)"),
+    (HKLM, RUN_32, "Startup registry (all users, 32-bit)"),
+]
+IGNORED_NAMES = {"SentinelAntivirus"}  # our own start-with-Windows entry
+META_KEY = "startup_known"
+TASKS_META_KEY = "startup_known_tasks"
+TASK_POLL_SECONDS = 300
+TASK_LOCATION = "Scheduled task"
+_TASK_SCRIPT = (
+    "Get-ScheduledTask | ForEach-Object { [pscustomobject]@{ n = $_.TaskPath + $_.TaskName; "
+    "a = (($_.Actions | Where-Object { $_.Execute } | ForEach-Object "
+    "{ ($_.Execute + ' ' + $_.Arguments).Trim() }) -join ' ; ') } } | ConvertTo-Json -Compress"
+)
+CREATE_NO_WINDOW = 0x08000000
+
+
+def default_folder_locations():
+    return [(paths.known_folder("startup"), "Startup folder (your account)"),
+            (paths.known_folder("common_startup"), "Startup folder (all users)")]
+
+
+@dataclass
+class StartupEntry:
+    location: str        # human-readable place
+    name: str
+    command: str
+    kind: str            # "registry", "folder" or "task"
+    hive: int | None = None
+    key: str | None = None
+    file: Path | None = None
+
+    @property
+    def id(self) -> str:
+        return f"{self.location}|{self.name}"
+
+
+def snapshot(reg_locations=None, folder_locations=None) -> dict[str, StartupEntry]:
+    reg_locations = DEFAULT_REG_LOCATIONS if reg_locations is None else reg_locations
+    folder_locations = default_folder_locations() if folder_locations is None else folder_locations
+    entries = {}
+    for hive, key, label in reg_locations:
+        try:
+            with winreg.OpenKey(hive, key, 0, winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as k:
+                i = 0
+                while True:
+                    try:
+                        name, value, _ = winreg.EnumValue(k, i)
+                    except OSError:
+                        break
+                    i += 1
+                    if name and name not in IGNORED_NAMES:
+                        e = StartupEntry(label, name, str(value), "registry", hive=hive, key=key)
+                        entries[e.id] = e
+        except OSError:
+            continue
+    for folder, label in folder_locations:
+        try:
+            for f in Path(folder).iterdir():
+                if f.is_file() and f.name.lower() != "desktop.ini":
+                    e = StartupEntry(label, f.name, str(f), "folder", file=f)
+                    entries[e.id] = e
+        except OSError:
+            continue
+    return entries
+
+
+def target_program(entry: StartupEntry) -> Path | None:
+    """Best guess at the program a startup entry launches."""
+    command = entry.command
+    if entry.kind == "folder" and entry.file and entry.file.suffix.lower() == ".lnk":
+        command = _shortcut_target(entry.file) or command
+    command = os.path.expandvars(command.split(" ; ")[0].strip())  # tasks: first action
+    if command.startswith('"'):
+        candidate = command[1:].split('"', 1)[0]
+    else:
+        lower = command.lower()
+        cut = next((lower.find(ext) + len(ext) for ext in (".exe", ".bat", ".cmd", ".vbs", ".ps1", ".js")
+                    if ext in lower), -1)
+        candidate = command[:cut] if cut > 0 else command.split(" ", 1)[0]
+    path = Path(candidate)
+    if not path.is_absolute():  # e.g. plain "powershell.exe"
+        found = shutil.which(candidate)
+        path = Path(found) if found else path
+    return path if path.is_file() else None
+
+
+def snapshot_tasks() -> dict[str, StartupEntry] | None:
+    """All scheduled tasks, or None if they couldn't be listed this time."""
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", _TASK_SCRIPT], capture_output=True,
+                             timeout=120, creationflags=CREATE_NO_WINDOW)
+        tasks = json.loads(out.stdout.decode("utf-8", "replace") or "null")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    if not tasks:
+        return None
+    if isinstance(tasks, dict):  # PowerShell emits a bare object when there's only one
+        tasks = [tasks]
+    entries = {}
+    for t in tasks:
+        e = StartupEntry(TASK_LOCATION, t.get("n", ""), t.get("a") or "(no program)", "task")
+        entries[e.id] = e
+    return entries
+
+
+def _shortcut_target(lnk: Path) -> str | None:
+    # Resolving .lnk needs the Shell COM API; this runs only when an alert fires.
+    script = f"(New-Object -ComObject WScript.Shell).CreateShortcut('{str(lnk).replace(chr(39), chr(39) * 2)}').TargetPath"
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True,
+                             text=True, timeout=15, creationflags=0x08000000)
+        return out.stdout.strip() or None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def remove(entry: StartupEntry):
+    """Takes the entry out of startup. Folder entries go to quarantine (restorable)."""
+    if entry.kind == "registry":
+        try:
+            with winreg.OpenKey(entry.hive, entry.key, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as k:
+                winreg.DeleteValue(k, entry.name)
+        except PermissionError:
+            raise RuntimeError("needs administrator rights (it's an all-users entry)")
+    elif entry.kind == "task":
+        result = subprocess.run(["schtasks", "/delete", "/tn", entry.name, "/f"], capture_output=True,
+                                creationflags=CREATE_NO_WINDOW)
+        if result.returncode != 0:
+            message = (result.stderr or result.stdout).decode("mbcs", "replace").strip()
+            if "denied" in message.lower():
+                raise RuntimeError("needs administrator rights to delete this task")
+            raise RuntimeError(message or "schtasks couldn't delete the task")
+    else:
+        from core import quarantine
+        quarantine.quarantine_file(entry.file, f"Startup entry: {entry.name}")
+
+
+def _load_known(meta_key):
+    raw = database.get_meta(meta_key)
+    return None if raw is None else json.loads(raw)
+
+
+def _save_known(entries: dict[str, StartupEntry], meta_key):
+    database.set_meta(**{meta_key: json.dumps({k: e.command for k, e in entries.items()})})
+
+
+class _Group:
+    """One set of startup locations with its own saved baseline and poll rate."""
+
+    def __init__(self, take_snapshot, meta_key, every_seconds):
+        self.take_snapshot, self.meta_key, self.every = take_snapshot, meta_key, every_seconds
+        self.known = _load_known(meta_key)
+        self.next_poll = 0.0
+
+    def poll(self, on_new):
+        now = time.monotonic()
+        if now < self.next_poll:
+            return
+        self.next_poll = now + self.every
+        current = self.take_snapshot()
+        if current is None:  # listing failed: keep the old baseline rather than report everything
+            return
+        if self.known is None:  # first time this group is watched: silent baseline
+            self.known = {k: e.command for k, e in current.items()}
+            _save_known(current, self.meta_key)
+            return
+        changed = [e for k, e in current.items() if self.known.get(k) != e.command]
+        if changed or current.keys() != self.known.keys():
+            for entry in changed:
+                on_new(entry)
+            self.known = {k: e.command for k, e in current.items()}
+            _save_known(current, self.meta_key)
+
+
+def watch_loop(on_new, stop_flag: list[bool], interval: float = 5.0,
+               reg_locations=None, folder_locations=None, meta_key: str = META_KEY,
+               task_snapshot=snapshot_tasks, task_meta_key: str = TASKS_META_KEY,
+               task_interval: float = TASK_POLL_SECONDS):
+    """Calls on_new(StartupEntry) once for each entry added (or changed) after the baseline."""
+    groups = [_Group(lambda: snapshot(reg_locations, folder_locations), meta_key, interval)]
+    if task_snapshot is not None:
+        groups.append(_Group(task_snapshot, task_meta_key, task_interval))
+    while not stop_flag[0]:
+        for group in groups:
+            group.poll(on_new)
+        time.sleep(min(1.0, interval))
