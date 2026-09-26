@@ -257,6 +257,27 @@ footer p { margin: 0; max-width: 70ch; }
 .vpn-ip { margin-top: 12px; font: 12.5px "IBM Plex Mono", monospace; color: var(--muted); }
 @media (max-width: 960px) { .vpn-grid { grid-template-columns: 1fr; } }
 
+
+/* firewall */
+.fw-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: var(--shot-shadow); display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; }
+.fw-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 14px; }
+.fw-mode { text-align: left; border: 0; border-radius: 10px; padding: 11px 12px; background: var(--panel); color: var(--text); cursor: pointer; font: inherit; }
+.fw-mode b { display: block; font-size: 14px; }
+.fw-mode span { display: block; font-size: 12.5px; color: var(--muted); line-height: 1.4; margin-top: 2px; }
+.fw-mode[aria-pressed="true"] { background: var(--accent-strong); color: #fff; }
+.fw-mode[aria-pressed="true"] span { color: rgba(255,255,255,.85); }
+.fw-mode.lock[aria-pressed="true"] { background: var(--bad); }
+.fw-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; font-size: 14.5px; border-top: 1px solid var(--line); }
+.fw-pill { font: 600 11px "IBM Plex Mono", monospace; padding: 3px 9px; border-radius: 4px; color: #0b1120; transition: background .3s; }
+.fw-pill.good { background: var(--good); } .fw-pill.warn { background: var(--warn); } .fw-pill.bad { background: var(--bad); }
+.fw-side { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border-left: 1px solid var(--line); padding-left: 22px; }
+.fw-ring { width: 110px; height: 110px; border-radius: 50%; border: 9px solid var(--good); display: grid; place-items: center; color: var(--good); transition: border-color .3s, color .3s; }
+.fw-ring svg { width: 34px; height: 34px; }
+.fw-state { font-weight: 700; font-size: 20px; color: var(--good); margin-top: 6px; transition: color .3s; }
+.fw-card.lockdown .fw-ring { border-color: var(--warn); color: var(--warn); }
+.fw-card.lockdown .fw-state { color: var(--bad); }
+@media (max-width: 960px) { .fw-card { grid-template-columns: 1fr; } .fw-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 18px; } }
+
 @media (max-width: 960px) {
   .hero .wrap, .split, .install { grid-template-columns: 1fr; }
   .hero { padding-top: 56px; }
@@ -289,6 +310,7 @@ footer p { margin: 0; max-width: 70ch; }
     <a class="link" href="#detection">Detection</a>
     <a class="link" href="#ask">Ask Sentinel</a>
     <a class="link" href="#vpn">VPN</a>
+    <a class="link" href="#firewall">Firewall</a>
     <a class="link" href="#protection">Protection</a>
     <a class="link" href="#limits">Limits</a>
     <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
@@ -313,7 +335,7 @@ footer p { margin: 0; max-width: 70ch; }
     <div>
       <div class="kicker"><b>●</b> Windows 10 &amp; 11 · free · open source</div>
       <h1>An antivirus,<br>built from <em>scratch.</em></h1>
-      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window. Got a sketchy message? Ask Sentinel checks it with an AI that runs on your own PC. And there's a free VPN built in.</p>
+      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window. Got a sketchy message? Ask Sentinel checks it with an AI that runs on your own PC. And there's a free VPN and a firewall control panel built in.</p>
       <div class="cta">
         <a class="btn primary" id="dl" href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
@@ -428,11 +450,44 @@ footer p { margin: 0; max-width: 70ch; }
   </div>
 </section>
 
+<section id="firewall">
+  <div class="wrap vpn-grid">
+    <div>
+      <div class="kicker"><b>04</b> Firewall</div>
+      <h2>Your firewall, without the maze.</h2>
+      <p class="lede" style="margin-top:22px">A clear control panel for the Windows Firewall that's already on your PC. It's a real kernel-level filter, just without the 400-rule settings window.</p>
+      <ul class="ask-points">
+        <li><b>Standard or Lockdown</b><span>Standard blocks incoming connections. Lockdown cuts every connection in and out with one click, for when you think something's wrong.</span></li>
+        <li><b>Block any app</b><span>Pick a program and it can't reach the internet or accept connections. Unblock it any time.</span></li>
+        <li><b>Nothing hidden</b><span>Every rule Sentinel adds is labeled "Sentinel Antivirus" in Windows' own firewall settings, and uninstalling removes them all.</span></li>
+      </ul>
+    </div>
+    <div class="fw-card" id="fw-card">
+      <div>
+        <div style="font-weight:600">Mode</div>
+        <div class="fw-modes">
+          <button class="fw-mode" data-fw="standard" aria-pressed="true"><b>Standard</b><span>Blocks incoming. Apps can go out.</span></button>
+          <button class="fw-mode lock" data-fw="lockdown" aria-pressed="false"><b>Lockdown</b><span>Blocks all traffic, in and out.</span></button>
+        </div>
+        <div class="fw-row"><span>Windows Firewall</span><span class="fw-pill good">Active</span></div>
+        <div class="fw-row"><span>Incoming connections</span><span class="fw-pill good">Block</span></div>
+        <div class="fw-row"><span>Outgoing connections</span><span class="fw-pill warn" id="fw-out">Allow</span></div>
+        <div class="fw-row"><span>Network type</span><span class="fw-pill warn">Public</span></div>
+      </div>
+      <div class="fw-side">
+        <div class="fw-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+        <div style="font-weight:600;margin-top:12px">Firewall</div>
+        <div class="fw-state" id="fw-state">Active</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="app">
   <div class="wrap">
     <div class="app-head">
       <div>
-        <div class="kicker"><b>04</b> The app</div>
+        <div class="kicker"><b>05</b> The app</div>
         <h2>Calm when it's quiet.<br>Loud when it matters.</h2>
       </div>
       <div class="seg" role="group" aria-label="App theme">
@@ -454,7 +509,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="protection">
   <div class="wrap">
-    <div class="kicker"><b>05</b> Real-time protection</div>
+    <div class="kicker"><b>06</b> Real-time protection</div>
     <h2>Four watchers.<br>One background agent.</h2>
     <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
 
@@ -485,7 +540,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="languages">
   <div class="wrap">
-    <div class="kicker"><b>06</b> Five languages</div>
+    <div class="kicker"><b>07</b> Five languages</div>
     <h2>Speaks your language.</h2>
     <p class="lede" style="margin-top:22px">Starts in your Windows display language and switches live — popups, tray menu, activity log, installer and uninstaller included. Dates and numbers follow local formats.</p>
     <div class="langs">
@@ -502,7 +557,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="split" style="margin-bottom:0">
       <div>
-        <div class="kicker"><b>07</b> Honest limits</div>
+        <div class="kicker"><b>08</b> Honest limits</div>
         <h2>What it can't do.</h2>
       </div>
       <p class="lede">Sentinel is a portfolio project, not a replacement for Microsoft Defender. Keep Defender on. Here's exactly where the edges are.</p>
@@ -520,7 +575,7 @@ footer p { margin: 0; max-width: 70ch; }
 <section id="install">
   <div class="wrap install">
     <div>
-      <div class="kicker"><b>08</b> Install</div>
+      <div class="kicker"><b>09</b> Install</div>
       <h2>Two minutes,<br>no admin rights.</h2>
       <ol class="steps" style="margin-top:36px">
         <li><div><b>Download SentinelSetup.exe</b><span>From the latest GitHub release. Its SHA-256 is listed in the release notes.</span></div></li>
@@ -758,6 +813,17 @@ new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { showConvo(0); o.
                                                      : "Your public IP: 203.0.113.24 (your real address)";
   });
 })();
+
+// ---- Firewall card demo ----
+document.querySelectorAll("[data-fw]").forEach(b => b.addEventListener("click", () => {
+  const lock = b.dataset.fw === "lockdown";
+  document.querySelectorAll("[data-fw]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  document.getElementById("fw-card").classList.toggle("lockdown", lock);
+  const out = document.getElementById("fw-out");
+  out.textContent = lock ? "Block" : "Allow";
+  out.className = "fw-pill " + (lock ? "bad" : "warn");
+  document.getElementById("fw-state").textContent = lock ? "Lockdown" : "Active";
+}));
 
 // ---- latest release details from GitHub ----
 fetch("https://api.github.com/repos/willischilling/sentinel-antivirus/releases/latest")

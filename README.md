@@ -82,6 +82,18 @@ A VPN tab with an on/off switch, the server's location on a world map, and your 
 - **IP and location:** looked up with [ipwho.is](https://ipwho.is/), which sees only the request itself, the same as any website you visit.
 - **Clean up:** **Remove VPN** in the tab, or uninstalling Sentinel, deletes the tunnel and its config with one admin prompt. WireGuard itself stays installed.
 
+### Firewall
+A control panel for the built-in **Windows Firewall**, a real kernel-level filter. Sentinel doesn't add a firewall of its own.
+
+- **Overview:** whether the firewall is on, whether incoming and outgoing connections are blocked, and whether your current network is marked Public or Private. There's a **Turn on firewall** button if it's ever off.
+- **Modes:**
+  - **Standard (recommended):** blocks incoming connections; apps can go out unless you block them.
+  - **Lockdown:** blocks all network traffic, in and out, for when you think the PC is infected. It works by adding a block-everything rule, because in Windows' firewall a block rule beats every allow rule.
+- **Blocked apps:** pick any program to cut it off from the network in both directions, and unblock it later. Windows' own programs can't be blocked here, because that could break Windows.
+- **How it's built:** changes go through Windows' firewall interface (`HNetCfg.FwPolicy2`), and each one shows the Windows admin prompt. The admin side only accepts these fixed actions, with checked arguments.
+- **Easy to find:** every rule Sentinel creates is in the "Sentinel Antivirus" group, so you can see them in Windows' own firewall settings.
+- **Clean up:** uninstalling Sentinel removes all of its rules and turns Lockdown off, together with the VPN cleanup, in one prompt.
+
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
 - A scanner for Downloads, Desktop, Documents or any folder, with an animated progress ring.
@@ -172,6 +184,7 @@ core/i18n.py, core/translations.py ── the 5 languages (about 250 phrases eac
 core/app_update.py ── checks GitHub for new releases, downloads and verifies the installer
 ask_page.py, core/scam_check.py, core/link_intel.py, core/assistant.py ── Ask Sentinel: chat tab, built-in checks, link lists, local AI
 vpn_page.py, core/vpn.py ── Sentinel VPN: the tab, and WireGuard setup/start/stop
+firewall_page.py, core/firewall.py ── Firewall: Windows Firewall modes and blocked apps
 theme.py ── dark and light palettes, swapped live
 ```
 

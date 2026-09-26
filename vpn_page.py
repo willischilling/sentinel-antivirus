@@ -114,7 +114,7 @@ class VpnPage(tk.Frame):
 
     # ------------------------------------------------------------- render --
     def _render(self):
-        s, info = self.state, settings.load().get("vpn") or {}
+        s, info = self.state, self._configured()
         status = s["status"]
         connected = status == "running"
         busy = s["busy"] or status in ("starting", "stopping")
@@ -189,9 +189,15 @@ class VpnPage(tk.Frame):
             if self.state["busy"]:
                 remove.state(["disabled"])
 
+    def _configured(self) -> dict:
+        """The saved server info, if the tunnel really exists. If it was removed outside
+        Sentinel (Windows reset, WireGuard uninstalled...), setup is shown again."""
+        info = settings.load().get("vpn") or {}
+        return {} if self.state["status"] == "not_setup" else info
+
     # ------------------------------------------------------------ actions --
     def _toggle(self):
-        if not (settings.load().get("vpn")):
+        if not self._configured():
             self._import()
             return
         turning_on = self.state["status"] != "running"
@@ -301,4 +307,4 @@ def _settled_status(timeout=15) -> str:
 
 
 def new_state() -> dict:
-    return {"status": "not_setup", "ip": None, "busy": False, "busy_text": None, "busy_values": {}, "error": None}
+    return {"status": None, "ip": None, "busy": False, "busy_text": None, "busy_values": {}, "error": None}

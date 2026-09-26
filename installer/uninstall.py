@@ -103,29 +103,50 @@ def schedule_folder_removal():
                      creationflags=DETACHED_PROCESS | CREATE_NO_WINDOW, close_fds=True)
 
 
-def remove_vpn():
-    """Removes the Sentinel VPN tunnel and its config, if one was set up. That needs
-    administrator rights, so Windows asks once. WireGuard itself is left installed."""
+def remove_system_changes():
+    """Undoes what Sentinel changed outside its folder: the VPN tunnel and its config, and
+    Sentinel's firewall rules (blocked apps, Lockdown). Those need administrator rights, so
+    Windows asks once. WireGuard itself is left installed."""
+    import base64
     import ctypes
 
-    from core import elevate, vpn
+    from core import elevate, firewall, vpn
 
-    if vpn.status() == "not_setup" and not vpn.PROGRAM_DATA.exists():
-        log("no VPN set up")
+    script = []
+    if vpn.status() != "not_setup" or vpn.PROGRAM_DATA.exists():
+        script.append(f"if (Test-Path {firewall._q(str(vpn.WIREGUARD_EXE))}) "
+                      f"{{ & {firewall._q(str(vpn.WIREGUARD_EXE))} /uninstalltunnelservice {vpn.TUNNEL} }}")
+        script.append(f"Remove-Item -Recurse -Force {firewall._q(str(vpn.PROGRAM_DATA))} -ErrorAction SilentlyContinue")
+    try:
+        fw = firewall.status()
+    except Exception as e:  # can't read it: try the cleanup anyway
+        log(f"couldn't read firewall state: {e}")
+        fw = None
+    if fw is None or fw.blocked_apps or fw.lockdown:
+        script.append("$fw = New-Object -ComObject HNetCfg.FwPolicy2")
+        script.append(f"$names = @($fw.Rules | Where-Object {{ $_.Grouping -eq {firewall._q(firewall.GROUP)} }} | "
+                      "ForEach-Object { $_.Name }) | Select-Object -Unique")
+        script.append("foreach ($n in $names) { while (@($fw.Rules | Where-Object { $_.Name -eq $n }).Count) "
+                      "{ $fw.Rules.Remove($n) } }")
+        if fw is None or fw.lockdown:  # Lockdown also blocks all incoming traffic; undo that too
+            script += [f"$fw.BlockAllInboundTraffic({t}) = $false" for t in firewall.PROFILES]
+    if not script:
+        log("no VPN or firewall changes to undo")
         return
-    parts = []
-    if vpn.WIREGUARD_EXE.exists():
-        parts.append(f'"{vpn.WIREGUARD_EXE}" /uninstalltunnelservice {vpn.TUNNEL}')
-    parts.append(f'rmdir /s /q "{vpn.PROGRAM_DATA}"')
+    encoded = base64.b64encode("\n".join(script).encode("utf-16-le")).decode()
     info = elevate.SHELLEXECUTEINFOW(cbSize=ctypes.sizeof(elevate.SHELLEXECUTEINFOW),
-                                     fMask=elevate.SEE_MASK_NOCLOSEPROCESS, lpVerb="runas", lpFile="cmd.exe",
-                                     lpParameters="/c " + " & ".join(parts), nShow=0)
+                                     fMask=elevate.SEE_MASK_NOCLOSEPROCESS, lpVerb="runas",
+                                     lpFile="powershell.exe",
+                                     lpParameters=f"-NoProfile -NonInteractive -EncodedCommand {encoded}", nShow=0)
     if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
         raise RuntimeError(f"admin prompt declined or failed (error {ctypes.GetLastError()})")
-    ctypes.windll.kernel32.WaitForSingleObject(info.hProcess, 60_000)
+    ctypes.windll.kernel32.WaitForSingleObject(info.hProcess, 120_000)
     ctypes.windll.kernel32.CloseHandle(info.hProcess)
     if vpn.status() != "not_setup":
         raise RuntimeError("the VPN tunnel is still there")
+    after = firewall.status()
+    if after.blocked_apps or after.lockdown:
+        raise RuntimeError("some Sentinel firewall rules are still there")
 
 
 def main():
@@ -143,7 +164,7 @@ def main():
     log(f"uninstalling from {INSTALL_DIR}")
     results = [
         step("close running Sentinel", kill_running_app),
-        step("remove VPN tunnel", remove_vpn),
+        step("undo VPN and firewall changes", remove_system_changes),
         step("remove shortcuts", remove_shortcuts),
         step("remove start-with-Windows entry", remove_startup_entry),
         step("remove Apps & Features entry", remove_uninstall_entry),

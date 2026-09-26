@@ -131,6 +131,10 @@ def _perform(action: str, args: list[str]):
         from . import vpn
 
         vpn.elevated_setup(args[0], args[1], args[2])
+    elif action == "firewall":
+        from . import firewall
+
+        firewall.elevated(args[0], args[1:])
     elif action == "vpnremove":
         from . import vpn
 

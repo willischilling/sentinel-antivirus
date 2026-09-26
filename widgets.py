@@ -37,6 +37,9 @@ ICONS = {
     "update": "",
     "cloud": "",
     "chat": "",
+    "firewall": "",
+    "upload": "",
+    "blocked": "",
 }
 _icon_family = None
 

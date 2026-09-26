@@ -25,6 +25,7 @@ from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL,
 from widgets import EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label
 from ask_page import AskPage, ChatState
 from vpn_page import VpnPage, new_state as new_vpn_state
+from firewall_page import FirewallPage, new_state as new_fw_state
 
 
 def configure_style(root: tk.Tk):
@@ -137,6 +138,7 @@ class App(tk.Tk):
         self._update = {"state": "checking", "release": None, "error": None, "progress": (0, 0)}
         self.ask_state = ChatState()  # the Ask Sentinel conversation, also kept across rebuilds
         self.vpn_state = new_vpn_state()
+        self.fw_state = new_fw_state()
 
         self._build_layout()
         self._show_page("dashboard")
@@ -155,6 +157,8 @@ class App(tk.Tk):
         self._poll_agent()
 
     def _poll_vpn(self, tick=0):
+        if self.current_page == "firewall" and tick % 7 == 0 and not self.fw_state["busy"]:
+            self.firewall_page.refresh()  # every ~20 s, to pick up changes made elsewhere
         if self.current_page == "vpn" and not self.vpn_state["busy"]:
             # Status every 3 s (picks up changes made outside Sentinel too), the IP every 30 s.
             self.vpn_page.refresh(ip=tick % 10 == 0)
@@ -200,6 +204,7 @@ class App(tk.Tk):
             ("scan", "scan", "nav_scanner"),
             ("ask", "chat", "nav_ask"),
             ("vpn", "globe", "nav_vpn"),
+            ("firewall", "firewall", "nav_firewall"),
             ("protection", "shield", "nav_protection"),
             ("quarantine", "lock", "nav_quarantine"),
             ("activity", "history", "nav_history"),
@@ -233,6 +238,8 @@ class App(tk.Tk):
         self.pages["ask"] = self.ask_page
         self.vpn_page = VpnPage(self.content, self)
         self.pages["vpn"] = self.vpn_page
+        self.firewall_page = FirewallPage(self.content, self)
+        self.pages["firewall"] = self.firewall_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -1253,6 +1260,8 @@ class App(tk.Tk):
                     self.ask_page.handle(kind, payload)
                 elif kind.startswith("vpn_"):
                     self.vpn_page.handle(kind, payload)
+                elif kind.startswith("fw_"):
+                    self.firewall_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
