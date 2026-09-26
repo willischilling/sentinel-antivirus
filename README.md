@@ -42,6 +42,7 @@ This runs as a separate background process (`Sentinel.exe --agent`), so it keeps
 | Program protection | Checks each new program within about a second of it starting, plus a background sweep of everything already running. |
 | Startup protection | Alerts when a program adds itself to the registry Run keys, a Startup folder, or Task Scheduler. Programs with a valid Microsoft signature (Edge, Windows components) are logged without a popup, except launchers like PowerShell, cmd and rundll32, which malware often hides behind. |
 | Ransomware protection | Watches Documents, Desktop, Pictures, Music, Videos and Downloads for many files suddenly turning into unreadable data or being renamed to strange extensions. |
+| USB drive protection | Scans USB drives and SD cards as soon as they're plugged in, at background priority (or asks first, or is off). Threats get the usual popup, and a clean drive gets a short "no threats" note. |
 
 **Alerts.** These appear as popups in the bottom-right corner, with buttons to act on them:
 - Quarantine or Delete a file.
@@ -79,6 +80,10 @@ A VPN tab with an on/off switch, the server's location on a world map, and your 
 - **Engine:** the official [WireGuard for Windows](https://www.wireguard.com/install/). If it's missing, Sentinel downloads the MSI from download.wireguard.com and only installs it after confirming it's signed by *WireGuard LLC*.
 - **One admin prompt, once.** Setup installs WireGuard if needed and stores the config (which holds the tunnel's private key) in `%ProgramData%\Sentinel Antivirus\vpn`, readable only by Windows and administrators. It then creates the tunnel service, set to start only when asked, and gives your Windows account permission to start and stop it. After that the switch works with no prompts.
 - **No leaks:** when the config routes all traffic (`0.0.0.0/0`), WireGuard blocks anything trying to go around the tunnel. Configs that run commands (`PostUp` and similar) are refused.
+- **Automatic VPN:** the background agent reads the current Wi-Fi connection through Windows' native Wi-Fi API (`wlanapi.dll`).
+  - It turns the VPN on by itself when you join an **open (no-password) network**, or, if you choose, any network you haven't marked as trusted.
+  - A popup says why, with **Disconnect** and **Trust this network** buttons.
+  - Your home network is never switched on automatically unless you pick the "any untrusted network" option.
 - **IP and location:** looked up with [ipwho.is](https://ipwho.is/), which sees only the request itself, the same as any website you visit.
 - **Clean up:** **Remove VPN** in the tab, or uninstalling Sentinel, deletes the tunnel and its config with one admin prompt. WireGuard itself stays installed.
 
@@ -218,6 +223,7 @@ webprotect_page.py, core/webprotect.py ── Web protection: DNS filtering (Qua
 app_updates_card.py, core/app_updates.py ── Out-of-date apps via winget
 core/schedule.py ── Scheduled quick scans
 security_page.py, core/security_score.py, core/pwned.py ── Security Check: score, fixes, password leak check
+core/usb.py, core/wifi.py ── USB drive detection; current Wi-Fi network (for automatic VPN)
 theme.py ── dark and light palettes, swapped live
 ```
 

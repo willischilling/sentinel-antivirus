@@ -12,7 +12,7 @@ import webbrowser
 from tkinter import filedialog, messagebox, ttk
 
 import theme as C
-from core import paths, settings, vpn
+from core import paths, settings, vpn, wifi
 from core.i18n import t
 from theme import FONT, FONT_BOLD, FONT_LARGE, FONT_SMALL
 from widgets import RoundedCard, ToggleSwitch, icon_label, pill, set_pill_style
@@ -179,6 +179,8 @@ class VpnPage(tk.Frame):
                 if self.state["busy"]:
                     btn.state(["disabled"])
         else:
+            self._auto_vpn(body)
+            tk.Frame(body, bg=C.BORDER, height=1).pack(fill="x", pady=(14, 12))
             row = tk.Frame(body, bg=C.CARD)
             row.pack(fill="x")
             icon_label(row, "info", 14, fg=C.TEXT_MUTED).pack(side="left", padx=(0, 10), anchor="n")
@@ -194,6 +196,51 @@ class VpnPage(tk.Frame):
         Sentinel (Windows reset, WireGuard uninstalled...), setup is shown again."""
         info = settings.load().get("vpn") or {}
         return {} if self.state["status"] == "not_setup" else info
+
+    def _auto_vpn(self, body):
+        """Turn the VPN on automatically on open (or untrusted) Wi-Fi; the agent does the switching."""
+        conf = settings.load()
+        mode = conf.get("auto_vpn", "open")
+        trusted = conf.get("trusted_networks") or []
+        tk.Label(body, text=t("autovpn_card_title"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        tk.Label(body, text=t("autovpn_card_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, wraplength=640,
+                 justify="left").pack(anchor="w", pady=(2, 8))
+        chips = tk.Frame(body, bg=C.CARD)
+        chips.pack(anchor="w")
+        for option in ("off", "open", "untrusted"):
+            selected = option == mode
+            bg = C.ACCENT_DARK if selected else C.BORDER
+            chip = RoundedCard(chips, bg=bg, outer=C.CARD, radius=8, padx=12, pady=6,
+                               hover_bg=None if selected else C.CARD_HOVER,
+                               command=None if selected else lambda o=option: self._set_auto(auto_vpn=o))
+            tk.Label(chip.body, text=t(f"autovpn_mode_{option}"), font=FONT_SMALL, bg=bg,
+                     fg=C.ON_ACCENT if selected else C.TEXT).pack()
+            chip.pack(side="left", padx=(0, 6))
+        conn = wifi.current()
+        line = tk.Frame(body, bg=C.CARD)
+        line.pack(fill="x", pady=(10, 0))
+        if conn:
+            key = "autovpn_now_secured" if conn.secured else "autovpn_now_open"
+            tk.Label(line, text=t(key, name=conn.name), font=FONT_SMALL, fg=C.TEXT, bg=C.CARD).pack(side="left")
+            if conn.name not in trusted:
+                link = tk.Label(line, text=t("autovpn_trust"), font=FONT_SMALL, fg=C.ACCENT, bg=C.CARD,
+                                cursor="hand2")
+                link.pack(side="left", padx=(10, 0))
+                link.bind("<Button-1>", lambda e: self._set_auto(trusted_networks=trusted + [conn.name]))
+        if trusted:
+            row = tk.Frame(body, bg=C.CARD)
+            row.pack(fill="x", pady=(8, 0))
+            tk.Label(row, text=t("autovpn_trusted_list"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(side="left")
+            for name in trusted:
+                tag = pill(row, f"{name}  ✕", C.BORDER, fg=C.TEXT)
+                tag.configure(cursor="hand2")
+                tag.pack(side="left", padx=(8, 0))
+                tag.bind("<Button-1>", lambda e, n=name: self._set_auto(
+                    trusted_networks=[x for x in trusted if x != n]))
+
+    def _set_auto(self, **changes):
+        settings.save(**changes)  # the background agent reads these on the next network change
+        self._render()
 
     # ------------------------------------------------------------ actions --
     def _toggle(self):

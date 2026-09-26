@@ -16,7 +16,7 @@ import launcher
 import single_instance
 from core import (
     activity, app_update, assistant, autostart, database, i18n, paths, quarantine, scanner, schedule, settings,
-    signatures, threat_intel,
+    signatures, threat_intel, usb,
 )
 from core.i18n import duration, number, plural, relative, t
 from core.version import VERSION
@@ -234,7 +234,7 @@ class App(tk.Tk):
         sidebar.pack_propagate(False)
 
         brand = tk.Frame(sidebar, bg=C.PANEL)
-        brand.pack(anchor="w", padx=20, pady=(22, 26))
+        brand.pack(anchor="w", padx=20, pady=(18, 16))
         if self._logo_small:
             tk.Label(brand, image=self._logo_small, bg=C.PANEL).pack(side="left", padx=(0, 11))
         brand_text = tk.Frame(brand, bg=C.PANEL)
@@ -866,7 +866,10 @@ class App(tk.Tk):
         self.download_desc = self._layer_row(layers.body, "download", t("layer_download"), "", change=True)
         self._layer_row(layers.body, "apps", t("layer_program"), t("layer_program_desc"))
         self._layer_row(layers.body, "power", t("layer_startup"), t("layer_startup_desc"))
-        self._layer_row(layers.body, "lock", t("layer_ransomware"), t("layer_ransomware_desc"), last=True)
+        self._layer_row(layers.body, "lock", t("layer_ransomware"), t("layer_ransomware_desc"))
+        self.usb_row = tk.Frame(layers.body, bg=C.CARD)
+        self.usb_row.pack(fill="x")
+        self._render_usb_row()
 
         log_card = RoundedCard(page, radius=16, padx=20, pady=14)
         log_card.pack(fill="both", expand=True, pady=(12, 0))
@@ -881,9 +884,39 @@ class App(tk.Tk):
         self.protection_log.tag_configure("warn", foreground=C.WARN)
         self.protection_log.tag_configure("info", foreground=C.TEXT)
 
+    def _render_usb_row(self):
+        for child in self.usb_row.winfo_children():
+            child.destroy()
+        tk.Frame(self.usb_row, bg=C.BORDER, height=1).pack(fill="x")
+        row = tk.Frame(self.usb_row, bg=C.CARD)
+        row.pack(fill="x", pady=6)
+        icon_label(row, "usb", 16, fg=C.ACCENT).pack(side="left", padx=(0, 16))
+        chips = tk.Frame(row, bg=C.CARD)
+        chips.pack(side="right")
+        current = usb.mode()
+        for mode in usb.MODES:
+            selected = mode == current
+            bg = C.ACCENT_DARK if selected else C.BORDER
+            chip = RoundedCard(chips, bg=bg, outer=C.CARD, radius=8, padx=10, pady=4,
+                               hover_bg=None if selected else C.CARD_HOVER,
+                               command=None if selected else lambda m=mode: self._set_usb_mode(m))
+            tk.Label(chip.body, text=t(f"usb_mode_{mode}"), font=FONT_SMALL, bg=bg,
+                     fg=C.ON_ACCENT if selected else C.TEXT).pack()
+            chip.pack(side="left", padx=(6, 0))
+        col = tk.Frame(row, bg=C.CARD)
+        col.pack(side="left", fill="x", expand=True)
+        tk.Label(col, text=t("layer_usb"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        tk.Label(col, text=t("layer_usb_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, justify="left",
+                 anchor="w").pack(anchor="w", fill="x")
+
+    def _set_usb_mode(self, mode):
+        settings.save(usb_mode=mode)  # the background agent reads it when a drive is plugged in
+        self.settings = settings.load()
+        self._render_usb_row()
+
     def _layer_row(self, body, icon, title, desc, change=False, last=False):
         row = tk.Frame(body, bg=C.CARD)
-        row.pack(fill="x", pady=8)
+        row.pack(fill="x", pady=6)
         icon_label(row, icon, 16, fg=C.ACCENT).pack(side="left", padx=(0, 16))
         status = pill(row)
         status.pack(side="right")

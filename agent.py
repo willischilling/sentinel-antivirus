@@ -16,7 +16,7 @@ import launcher
 import single_instance
 from core import (
     activity, authenticode, database, elevate, i18n, paths, quarantine, scanner, schedule, settings, signatures,
-    threat_intel,
+    threat_intel, usb, vpn, wifi,
 )
 from core.i18n import number, t
 from gui import clip, configure_style, default_watch_path
@@ -90,6 +90,8 @@ class Agent(tk.Tk):
         activity.log(t("log_started", folder=watch_path), "muted")
         threading.Thread(target=self._update_loop, daemon=True).start()
         threading.Thread(target=self._schedule_loop, daemon=True).start()
+        threading.Thread(target=self._usb_loop, daemon=True).start()
+        threading.Thread(target=self._wifi_loop, daemon=True).start()
         self.after(100, self._pump)
 
     def _sync_language(self):
@@ -146,6 +148,119 @@ class Agent(tk.Tk):
         activity.log(t("log_sched_done", files=number(total), flagged=number(flagged)),
                      "threat" if flagged else "muted")
 
+    # ------------------------------------------------------------ USB drives --
+    def _usb_loop(self):
+        """Notices USB drives / SD cards plugged in after protection started."""
+        known = usb.removable_drives()
+        while True:
+            time.sleep(2)
+            try:
+                now = usb.removable_drives()
+            except Exception:
+                continue
+            for drive in now - known:
+                self.events.put(("usb", drive))
+            known = now
+
+    def _on_usb(self, drive):
+        mode = usb.mode()
+        activity.log(t("log_usb_inserted", drive=drive.display), "muted")
+        if mode == "off":
+            return
+        if mode == "scan":
+            self._start_usb_scan(drive)
+            return
+        self.toasts.show(
+            title=t("usb_toast_title"), filename=drive.display, detail=t("usb_toast_ask"), location="",
+            accent=C.ACCENT,
+            actions=[(t("usb_scan"), "Accent.TButton", lambda: self._start_usb_scan(drive) or t("usb_scanning")),
+                     (t("btn_ignore"), "Ghost.TButton", lambda: None)],
+        )
+
+    def _start_usb_scan(self, drive):
+        threading.Thread(target=self._usb_scan, args=(drive,), daemon=True).start()
+
+    def _usb_scan(self, drive):
+        _background_priority()
+        activity.log(t("log_usb_scan_started", drive=drive.display), "muted")
+        total = flagged = 0
+        try:
+            for result in scanner.scan_directory(Path(drive.root)):
+                total += 1
+                if result.verdict in ("signature_match", "suspicious"):
+                    flagged += 1
+                    self.events.put(("file", result))  # the usual popup, with Quarantine / Delete
+        except OSError:  # the drive was pulled out mid-scan
+            activity.log(t("log_usb_removed", drive=drive.display), "warn")
+            return
+        activity.log(t("log_usb_scan_done", drive=drive.display, files=number(total), flagged=number(flagged)),
+                     "threat" if flagged else "muted")
+        if not flagged:
+            self.events.put(("usb_clean", (drive, total)))
+
+    def _on_usb_clean(self, drive, total):
+        self.toasts.show(title=t("usb_clean_title"), filename=drive.display,
+                         detail=t("usb_clean_detail", files=number(total)), location="", accent=C.GOOD,
+                         auto_close_ms=7000)
+
+    # -------------------------------------------------------------- auto-VPN --
+    def _wifi_loop(self):
+        """Turns the VPN on when joining an open (or untrusted) Wi-Fi network."""
+        last = None
+        while True:
+            time.sleep(5)
+            try:
+                conn = wifi.current()
+            except Exception:
+                continue
+            key = (conn.name, conn.secured) if conn else None
+            if key == last:
+                continue
+            last = key
+            if conn is None:
+                continue
+            conf = settings.load()
+            mode = conf.get("auto_vpn", "open")
+            trusted = conf.get("trusted_networks") or []
+            risky = (mode == "open" and not conn.secured) or (mode == "untrusted" and conn.name not in trusted)
+            if not risky or conn.name in trusted:
+                continue
+            state = vpn.status()
+            if state == "not_setup":
+                self.events.put(("wifi", (conn, "no_vpn")))
+            elif state == "stopped":
+                try:
+                    vpn.connect()
+                    self.events.put(("wifi", (conn, "connected")))
+                except Exception as e:
+                    activity.log(t("log_autovpn_failed", error=e), "warn")
+
+    def _on_wifi(self, conn, outcome):
+        reason = t("autovpn_open", name=conn.name) if not conn.secured else t("autovpn_untrusted", name=conn.name)
+        if outcome == "no_vpn":
+            self.toasts.show(title=t("autovpn_setup_title"), filename=conn.name, detail=reason + " " +
+                             t("autovpn_setup_hint"), location="", accent=C.WARN, auto_close_ms=15000)
+            return
+        activity.log(t("log_autovpn_on", name=conn.name), "muted")
+
+        def disconnect():
+            vpn.disconnect()
+            return t("autovpn_disconnected")
+
+        def trust():
+            conf = settings.load()
+            trusted = list(dict.fromkeys((conf.get("trusted_networks") or []) + [conn.name]))
+            settings.save(trusted_networks=trusted)
+            vpn.disconnect()
+            return t("autovpn_trusted", name=conn.name)
+
+        self.toasts.show(
+            title=t("autovpn_title"), filename=conn.name, detail=reason, location="", accent=C.GOOD,
+            actions=[(t("autovpn_ok"), "Accent.TButton", lambda: None),
+                     (t("autovpn_disconnect"), "Ghost.TButton", disconnect),
+                     (t("autovpn_trust"), "Ghost.TButton", trust)],
+        )
+
     def _update_loop(self):
         """Keeps malware fingerprints and YARA rules current while protecting."""
         while True:
@@ -191,6 +306,12 @@ class Agent(tk.Tk):
                     self._on_process_alert(payload)
                 elif kind == "startup":
                     self._on_startup_alert(*payload)
+                elif kind == "usb":
+                    self._on_usb(payload)
+                elif kind == "usb_clean":
+                    self._on_usb_clean(*payload)
+                elif kind == "wifi":
+                    self._on_wifi(*payload)
                 elif kind == "ransomware":
                     self._on_ransomware_alert(payload)
                 elif kind == "open_ui":
