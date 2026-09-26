@@ -92,7 +92,7 @@ Without the AI download, the built-in checks still work on their own.
 ## Getting started
 
 ### Download
-Run **[SentinelSetup.exe](SentinelSetup.exe)**. It's in the main folder of this repo, so it's also included if you use **Code → Download ZIP**. You can also get it from the [latest release](https://github.com/willischilling/sentinel-antivirus/releases/latest), whose notes include a SHA-256 checksum for verifying the download.
+**[Download SentinelSetup.exe](https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe)** from the latest release. The [release notes](https://github.com/willischilling/sentinel-antivirus/releases/latest) include a SHA-256 checksum for verifying the download. There's also the [website](https://willischilling.github.io/sentinel-antivirus/).
 
 The installer isn't code-signed, so Windows SmartScreen will warn you: click **More info → Run anyway**.
 
@@ -120,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File build_installer.ps1
 This produces:
 - `dist\Sentinel\`: the app, built with `--onedir` so it starts quickly
 - `dist\Uninstall.exe`
-- `dist\SentinelSetup.exe`: the installer, which bundles the other two. It's also copied to the repo root.
+- `dist\SentinelSetup.exe`: the installer, which bundles the other two. Releases publish it as an asset rather than committing it to the repo.
 
 ### Command line
 There's also a basic CLI (`cli.py`) that uses the same scanning engine:

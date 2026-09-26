@@ -13,3 +13,6 @@ quarantine/
 
 # Local test samples
 test_files/
+
+# Installers are published as release assets, not committed
+/SentinelSetup.exe
