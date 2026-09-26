@@ -154,10 +154,11 @@ class App(tk.Tk):
             self._start_intel_update()  # the agent normally does this, but it isn't running
         self._poll_agent()
 
-    def _poll_vpn(self):
+    def _poll_vpn(self, tick=0):
         if self.current_page == "vpn" and not self.vpn_state["busy"]:
-            self.vpn_page.refresh()  # picks up changes made outside Sentinel too
-        self.after(3000, self._poll_vpn)
+            # Status every 3 s (picks up changes made outside Sentinel too), the IP every 30 s.
+            self.vpn_page.refresh(ip=tick % 10 == 0)
+        self.after(3000, self._poll_vpn, tick + 1)
 
     def _unload_idle_ai(self):
         assistant.Assistant.unload_if_idle()  # frees ~3 GB of memory a few minutes after the last question

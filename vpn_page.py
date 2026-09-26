@@ -6,6 +6,7 @@ All slow work (sc.exe, downloads, IP lookups, the admin prompt) runs on
 worker threads and reports back through the app's event queue.
 """
 import threading
+import time
 import tkinter as tk
 import webbrowser
 from tkinter import filedialog, messagebox, ttk
@@ -131,7 +132,7 @@ class VpnPage(tk.Frame):
 
         if info:
             self.country_pill.configure(text=info.get("country") or "VPN")
-            self.country_pill.pack(side="left", padx=(0, 10))
+            self.country_pill.pack(side="left", padx=(0, 10), before=self.server_label)
             self.server_label.configure(text=info.get("city") and f"{info['city']} · {info['server']}"
                                         or info.get("server", ""))
             self.change_link.configure(text=t("vpn_change"))
@@ -253,7 +254,8 @@ class VpnPage(tk.Frame):
             except Exception as e:  # shown on the page; the switch goes back to the real state
                 queue.put(("vpn_done", str(e)))
             if refresh_ip:
-                queue.put(("vpn_status", vpn.status()))
+                queue.put(("vpn_status", _settled_status()))
+                time.sleep(1.5)  # let the new routes take effect, or the lookup sees the old IP
                 queue.put(("vpn_ip", vpn.ip_info()))
 
         threading.Thread(target=run, daemon=True).start()
@@ -276,7 +278,8 @@ class VpnPage(tk.Frame):
             changed = payload != s["status"]
             s["status"] = payload
             if changed and payload in ("running", "stopped", "not_setup") and not s["busy"]:
-                self.refresh(ip=True)  # the IP changes with the tunnel
+                # The IP changes with the tunnel (e.g. switched from the tray or WireGuard's own app).
+                self.after(2000, lambda: self.winfo_exists() and self.refresh(ip=True))
         elif kind == "vpn_ip":
             s["ip"] = payload
         elif kind == "vpn_busy":
@@ -285,6 +288,16 @@ class VpnPage(tk.Frame):
             s.update(busy=False, busy_text=None, error=t("vpn_failed", error=payload) if payload else None)
         if self.winfo_exists():
             self._render()
+
+
+def _settled_status(timeout=15) -> str:
+    """The tunnel status once it has finished starting or stopping."""
+    end = time.monotonic() + timeout
+    status = vpn.status()
+    while status in ("starting", "stopping") and time.monotonic() < end:
+        time.sleep(0.3)
+        status = vpn.status()
+    return status
 
 
 def new_state() -> dict:
