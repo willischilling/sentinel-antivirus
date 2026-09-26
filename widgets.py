@@ -72,6 +72,40 @@ def _downsample(img: Image.Image, size) -> Image.Image:
     return img.resize(size, Image.LANCZOS)
 
 
+def rounded_rect_image(width: int, height: int, radius: int, fill: str, outer: str, border: str | None = None):
+    """An antialiased rounded rectangle (optionally with a 1px border) on an `outer` background."""
+    def render():
+        s = SUPERSAMPLE
+        big = Image.new("RGB", (width * s, height * s), outer)
+        d = ImageDraw.Draw(big)
+        box = (0, 0, width * s - 1, height * s - 1)
+        if border:
+            d.rounded_rectangle(box, radius * s, fill=border)
+            d.rounded_rectangle((s, s, width * s - 1 - s, height * s - 1 - s), max(radius - 1, 0) * s, fill=fill)
+        else:
+            d.rounded_rectangle(box, radius * s, fill=fill)
+        return _downsample(big, (width, height))
+
+    return _cached(("rrect", width, height, radius, fill, outer, border), render)
+
+
+def pill(parent, text, color, fg="#0b1120", outer=None, font=None):
+    """A small rounded tag, e.g. "Active" or "BLOCKED". Update it with set_pill_style()."""
+    label = tk.Label(parent, bd=0, padx=0, pady=0, compound="center")
+    set_pill_style(label, text, color, fg, outer, font)
+    return label
+
+
+def set_pill_style(label, text, color, fg="#0b1120", outer=None, font=None):
+    outer = C.CARD if outer is None else outer
+    font = font or (C.UI_SEMIBOLD, 8)
+    metrics = tkfont.Font(font=font)
+    height = metrics.metrics("linespace") + 6
+    width = metrics.measure(text) + 18
+    image = rounded_rect_image(width, height, height // 2, color, outer)
+    label.configure(text=text, image=image, font=font, fg=fg, bg=outer)
+
+
 # ------------------------------------------------------------------ recolor --
 def recolor(widget, old: str, new: str, _root=True):
     """Swap background `old` -> `new` on a widget tree (used for hover states).
@@ -252,8 +286,8 @@ class Ring(tk.Canvas):
         self._ring = self.create_image(size // 2, size // 2)
         self._center_img = self.create_image(size // 2, size // 2)
         self._glyph = self.create_text(size // 2, size // 2 - 8, fill=C.TEXT, font=icon_font(30))
-        self._text = self.create_text(size // 2, size // 2, fill=C.TEXT, font=("Segoe UI Semibold", 18))
-        self._sub = self.create_text(size // 2, size // 2 + 22, fill=C.TEXT_MUTED, font=("Segoe UI", 9))
+        self._text = self.create_text(size // 2, size // 2, fill=C.TEXT, font=(C.DISPLAY, 18))
+        self._sub = self.create_text(size // 2, size // 2 + 22, fill=C.TEXT_MUTED, font=(C.UI, 9))
         self._spin_job = None
         self._angle = 0
 
@@ -267,7 +301,7 @@ class Ring(tk.Canvas):
         self.itemconfigure(self._glyph, text=glyph_text, fill=glyph_color or color)
         self.coords(self._glyph, c, c - 14 if text else c)
         self.coords(self._text, c, c + 24)
-        self.itemconfigure(self._text, text=text, font=("Segoe UI Semibold", 11))
+        self.itemconfigure(self._text, text=text, font=(C.UI_SEMIBOLD, 11))
         self.itemconfigure(self._sub, text="")
 
     def spin(self, text="", subtext=""):
@@ -277,7 +311,7 @@ class Ring(tk.Canvas):
         self.itemconfigure(self._glyph, text="")
         self.coords(self._text, c, c - 7)
         self.coords(self._sub, c, c + 17)
-        self.itemconfigure(self._text, text=text, font=("Segoe UI Semibold", 18))
+        self.itemconfigure(self._text, text=text, font=(C.DISPLAY, 18))
         self.itemconfigure(self._sub, text=subtext)
         if self._spin_job is None:
             self._tick()
@@ -301,17 +335,22 @@ class Ring(tk.Canvas):
 
 # ----------------------------------------------------------------- NavItem --
 class NavItem(tk.Frame):
+    """A sidebar entry. The current page gets a rounded highlight and a small accent marker."""
+
     def __init__(self, parent, icon, label, command):
         super().__init__(parent, bg=C.PANEL, cursor="hand2")
         self.active = False
-        self.bar = tk.Frame(self, bg=C.PANEL, width=3)
-        self.bar.pack(side="left", fill="y")
-        self.icon = icon_label(self, icon, 13, fg=C.TEXT_MUTED, bg=C.PANEL)
-        self.icon.pack(side="left", padx=(17, 12), pady=11)
-        self.badge = tk.Label(self, text="●", font=("Segoe UI", 8), fg=C.ACCENT, bg=C.PANEL)
-        self.text = tk.Label(self, text=label, font=FONT, fg=C.TEXT_MUTED, bg=C.PANEL, anchor="w")
+        self.card = RoundedCard(self, bg=C.PANEL, outer=C.PANEL, radius=8, padx=8, pady=0)
+        self.card.pack(fill="x", padx=10, pady=1)
+        body = self.card.body
+        self.bar = tk.Frame(body, bg=C.PANEL, width=3, height=18)
+        self.bar.pack(side="left")
+        self.icon = icon_label(body, icon, 13, fg=C.TEXT_MUTED, bg=C.PANEL)
+        self.icon.pack(side="left", padx=(9, 12), pady=9)
+        self.badge = tk.Label(body, text="●", font=(C.UI, 8), fg=C.ACCENT, bg=C.PANEL)
+        self.text = tk.Label(body, text=label, font=FONT, fg=C.TEXT_MUTED, bg=C.PANEL, anchor="w")
         self.text.pack(side="left", fill="x", expand=True)
-        for w in (self, self.bar, self.icon, self.text, self.badge):
+        for w in (self, self.card, body, self.bar, self.icon, self.text, self.badge, *self.card._corners):
             w.bind("<Button-1>", lambda e: command())
             w.bind("<Enter>", lambda e: self._hover(True))
             w.bind("<Leave>", lambda e: self._hover(False))
@@ -319,13 +358,13 @@ class NavItem(tk.Frame):
     def set_badge(self, visible: bool):
         """A small dot after the label, e.g. 'update available'."""
         if visible:
-            self.badge.pack(side="right", padx=(0, 16), before=self.text)
+            self.badge.pack(side="right", padx=(0, 8), before=self.text)
         else:
             self.badge.pack_forget()
 
     def _paint(self, bg, fg, bar, font):
-        for w in (self, self.icon, self.text, self.badge):
-            w.configure(bg=bg)
+        if bg != self.card.bg:
+            self.card.set_bg(bg)
         self.icon.configure(fg=fg if not self.active else C.ACCENT)
         self.text.configure(fg=fg, font=font)
         self.bar.configure(bg=bar)
@@ -339,7 +378,7 @@ class NavItem(tk.Frame):
 
     def _hover(self, inside: bool):
         if not self.active:
-            self._paint(C.CARD if inside else C.PANEL, C.TEXT if inside else C.TEXT_MUTED, C.PANEL, FONT)
+            self._paint(C.CARD_HOVER if inside else C.PANEL, C.TEXT if inside else C.TEXT_MUTED, C.PANEL, FONT)
 
 
 # -------------------------------------------------------------- EmptyState --

@@ -2,6 +2,7 @@
 color attributes in place, so code must read them as theme.BG etc. at draw
 time rather than importing the values (which would freeze them).
 """
+import os
 import sys
 
 DARK = {
@@ -91,10 +92,16 @@ def style_title_bar(window):
 
 apply("dark")
 
-FONT = ("Segoe UI", 10)
-FONT_BOLD = ("Segoe UI Semibold", 10)
-FONT_LARGE = ("Segoe UI Semibold", 12)
-FONT_TITLE = ("Segoe UI Semibold", 18)
-FONT_HERO = ("Segoe UI Semibold", 24)
-FONT_SMALL = ("Segoe UI", 9)
+# Windows 11 ships Segoe UI Variable (the font of its own apps); Windows 10 falls back to Segoe UI.
+_VARIABLE = os.path.exists(os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts", "SegUIVar.ttf"))
+UI = "Segoe UI Variable Text" if _VARIABLE else "Segoe UI"
+UI_SEMIBOLD = "Segoe UI Variable Text Semibold" if _VARIABLE else "Segoe UI Semibold"
+DISPLAY = "Segoe UI Variable Display Semib" if _VARIABLE else "Segoe UI Semibold"  # titles
+
+FONT = (UI, 10)
+FONT_BOLD = (UI_SEMIBOLD, 10)
+FONT_LARGE = (UI_SEMIBOLD, 12)
+FONT_TITLE = (DISPLAY, 19)
+FONT_HERO = (DISPLAY, 25)
+FONT_SMALL = (UI, 9)
 FONT_MONO = ("Consolas", 9)

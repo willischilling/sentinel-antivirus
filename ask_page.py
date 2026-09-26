@@ -17,7 +17,7 @@ import theme as C
 from core import assistant, scam_check
 from core.i18n import t
 from theme import FONT, FONT_BOLD, FONT_SMALL
-from widgets import RoundedCard, icon_label
+from widgets import RoundedCard, icon_label, pill
 
 WRAP = 470
 
@@ -49,7 +49,7 @@ class AskPage(tk.Frame):
         self._ai_label = None
         self._status_label = None
 
-        tk.Label(self, text=t("nav_ask"), font=("Segoe UI Semibold", 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
+        tk.Label(self, text=t("nav_ask"), font=(C.DISPLAY, 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
         tk.Label(self, text=t("ask_sub"), font=FONT, fg=C.TEXT_MUTED, bg=C.BG).pack(anchor="w", pady=(2, 18))
         self.card = RoundedCard(self, radius=16, padx=24, pady=18)
         self.card.pack(fill="both", expand=True)
@@ -71,7 +71,7 @@ class AskPage(tk.Frame):
         box.place(relx=0.5, rely=0.47, anchor="center")
         if self.logo:
             tk.Label(box, image=self.logo, bg=C.CARD).pack(pady=(0, 16))
-        tk.Label(box, text=t("ask_hello"), font=("Segoe UI Semibold", 16), fg=C.TEXT, bg=C.CARD,
+        tk.Label(box, text=t("ask_hello"), font=(C.DISPLAY, 16), fg=C.TEXT, bg=C.CARD,
                  justify="center").pack()
         tk.Label(box, text=t("ask_intro"), font=FONT, fg=C.TEXT, bg=C.CARD, wraplength=440,
                  justify="center").pack(pady=(12, 12))
@@ -134,12 +134,12 @@ class AskPage(tk.Frame):
         # Input
         entry_row = tk.Frame(self.body, bg=C.CARD)
         entry_row.pack(fill="x")
-        border = tk.Frame(entry_row, bg=C.BORDER)
-        border.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        self.entry = tk.Text(border, height=3, wrap="word", font=FONT, bg=C.BG, fg=C.TEXT, relief="flat",
-                             insertbackground=C.TEXT, padx=10, pady=8, highlightthickness=0, bd=0,
+        box = RoundedCard(entry_row, bg=C.BG, outer=C.CARD, radius=10, padx=10, pady=10)
+        box.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.entry = tk.Text(box.body, height=3, wrap="word", font=FONT, bg=C.BG, fg=C.TEXT, relief="flat",
+                             insertbackground=C.TEXT, padx=2, pady=0, highlightthickness=0, bd=0,
                              undo=True)
-        self.entry.pack(fill="both", padx=1, pady=1)
+        self.entry.pack(fill="both")
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<FocusIn>", lambda e: self._placeholder(False))
         self.entry.bind("<FocusOut>", lambda e: self._placeholder(True))
@@ -198,8 +198,7 @@ class AskPage(tk.Frame):
         verdict = report.verdict
         if verdict:
             color = {"scam": C.BAD, "suspicious": C.WARN, "caution": C.WARN, "safe": C.GOOD}[verdict]
-            tk.Label(head, text=t(f"ask_verdict_{verdict}"), font=("Segoe UI Semibold", 8), fg="#0b1120",
-                     bg=color, padx=8, pady=1).pack(side="left", padx=(10, 0))
+            pill(head, t(f"ask_verdict_{verdict}"), color, outer=C.BG).pack(side="left", padx=(10, 0))
         icons = {"bad": ("warning", C.BAD), "warn": ("warning", C.WARN), "good": ("check", C.GOOD),
                  "info": ("info", C.TEXT_MUTED)}
         for finding in report.findings:
@@ -394,7 +393,7 @@ class AnswerLabel(tk.Frame):
 
     def __init__(self, parent, color):
         super().__init__(parent, bg=C.CARD)
-        self.head = tk.Label(self, font=("Segoe UI Semibold", 11), bg=C.CARD, justify="left",
+        self.head = tk.Label(self, font=(C.UI_SEMIBOLD, 11), bg=C.CARD, justify="left",
                              wraplength=WRAP + 60)
         self.rest = tk.Label(self, font=FONT, fg=color, bg=C.CARD, justify="left", wraplength=WRAP + 60)
 

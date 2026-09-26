@@ -22,7 +22,10 @@ from core.i18n import duration, number, plural, relative, t
 from core.version import VERSION
 import theme as C
 from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE
-from widgets import EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label
+from widgets import (
+    EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label, pill as rounded_pill, rounded_rect_image,
+    set_pill_style,
+)
 from ask_page import AskPage, ChatState
 from vpn_page import VpnPage, new_state as new_vpn_state
 from firewall_page import FirewallPage, new_state as new_fw_state
@@ -33,23 +36,35 @@ def configure_style(root: tk.Tk):
     style.theme_use("clam")
     style.configure(".", background=C.BG, foreground=C.TEXT, font=FONT)
 
-    def button(name, bg, fg, active, border=None, font=FONT_BOLD, padding=(16, 9)):
-        style.configure(name, background=bg, foreground=fg, borderwidth=1 if border else 0,
-                        bordercolor=border or bg, lightcolor=bg, darkcolor=bg,
-                        focuscolor=bg, font=font, padding=padding)
-        style.map(name, background=[("disabled", C.BORDER), ("active", active)],
-                  foreground=[("disabled", C.TEXT_MUTED)])
+    def button(name, bg, fg, active, pressed, border=None, font=FONT_BOLD, padding=(16, 9), radius=8, outer=None):
+        # Rounded, antialiased button shapes: one image per state, stretched by ttk (9-slice).
+        size = radius * 2 + 4
+        outer = C.CARD if outer is None else outer  # most buttons sit on cards
+        shapes = [rounded_rect_image(size, size, radius, color, outer, border)
+                  for color in (bg, active, pressed, C.BORDER if not border else C.CARD)]
+        element = f"Rounded{abs(hash((name, bg, active, pressed, border, outer, radius)))}.border"
+        if element not in _created_elements:
+            style.element_create(element, "image", shapes[0], ("disabled", shapes[3]), ("pressed", shapes[2]),
+                                 ("active", shapes[1]), border=radius, padding=2, sticky="nsew")
+            _created_elements.add(element)
+        style.layout(name, [(element, {"sticky": "nsew", "children": [
+            ("Button.padding", {"sticky": "nsew", "children": [("Button.label", {"sticky": "nsew"})]})]})])
+        style.configure(name, foreground=fg, background=bg, font=font, padding=padding, anchor="center")
+        style.map(name, foreground=[("disabled", C.TEXT_MUTED)], background=[("active", active)])
 
-    button("Accent.TButton", C.ACCENT, "#ffffff", C.ACCENT_DARK)
-    button("Hero.TButton", C.ACCENT, "#ffffff", C.ACCENT_DARK,
-           font=("Segoe UI Semibold", 11), padding=(26, 11))
-    button("Ghost.TButton", C.CARD, C.TEXT, C.CARD_HOVER, border=C.BORDER, font=FONT)
-    button("Danger.TButton", C.CARD, C.BAD, C.CARD_HOVER, border=C.BORDER, font=FONT)
+    button("Accent.TButton", C.ACCENT, "#ffffff", C.ACCENT_DARK, C.ACCENT_DARK)
+    button("Hero.TButton", C.ACCENT, "#ffffff", C.ACCENT_DARK, C.ACCENT_DARK,
+           font=(C.DISPLAY, 11), padding=(26, 11), radius=10)
+    button("Ghost.TButton", C.CARD, C.TEXT, C.CARD_HOVER, C.BORDER, border=C.BORDER, font=FONT)
+    button("Danger.TButton", C.CARD, C.BAD, C.CARD_HOVER, C.BORDER, border=C.BORDER, font=FONT)
+    # The same two for buttons placed straight on the page background
+    button("PageGhost.TButton", C.CARD, C.TEXT, C.CARD_HOVER, C.BORDER, border=C.BORDER, font=FONT, outer=C.BG)
+    button("PageDanger.TButton", C.CARD, C.BAD, C.CARD_HOVER, C.BORDER, border=C.BORDER, font=FONT, outer=C.BG)
 
     style.configure("Treeview", background=C.CARD, fieldbackground=C.CARD, foreground=C.TEXT,
                     borderwidth=0, font=FONT_SMALL, rowheight=30)
     style.configure("Treeview.Heading", background=C.CARD, foreground=C.TEXT_MUTED, borderwidth=0,
-                    relief="flat", font=("Segoe UI Semibold", 9), padding=(6, 8))
+                    relief="flat", font=(C.UI_SEMIBOLD, 9), padding=(6, 8))
     style.map("Treeview.Heading", background=[("active", C.CARD)])
     style.map("Treeview", background=[("selected", C.ACCENT_DARK)], foreground=[("selected", "#ffffff")])
     style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
@@ -96,13 +111,16 @@ def page_header(parent, title, subtitle):
     tk.Label(parent, text=subtitle, font=FONT, fg=C.TEXT_MUTED, bg=C.BG).pack(anchor="w", pady=(2, 18))
 
 
+_created_elements: set = set()  # ttk element names can only be created once per process
+
+
 def pill(parent, bg=None):
-    return tk.Label(parent, font=("Segoe UI Semibold", 8), bg=C.CARD if bg is None else bg, padx=9, pady=2)
+    return rounded_pill(parent, "", C.BORDER, outer=C.CARD if bg is None else bg)
 
 
 def set_pill(label, on: bool):
-    label.configure(text=t("pill_active") if on else t("off"),
-                    fg="#0b1120" if on else C.TEXT_MUTED, bg=C.GOOD if on else C.BORDER)
+    set_pill_style(label, t("pill_active") if on else t("off"), C.GOOD if on else C.BORDER,
+                   fg="#0b1120" if on else C.TEXT_MUTED, outer=label.cget("bg"))
 
 
 class App(tk.Tk):
@@ -195,7 +213,7 @@ class App(tk.Tk):
         brand_text = tk.Frame(brand, bg=C.PANEL)
         brand_text.pack(side="left")
         tk.Label(brand_text, text="SENTINEL", bg=C.PANEL, fg=C.TEXT,
-                 font=("Segoe UI Semibold", 14)).pack(anchor="w")
+                 font=(C.DISPLAY, 14)).pack(anchor="w")
         tk.Label(brand_text, text=t("brand_sub"), bg=C.PANEL, fg=C.TEXT_MUTED, font=FONT_SMALL).pack(anchor="w")
 
         self.nav = {}
@@ -919,9 +937,9 @@ class App(tk.Tk):
         self.q_tree.configure(selectmode="browse")
         btn_row = tk.Frame(page, bg=C.BG)
         btn_row.pack(fill="x", pady=(14, 0))
-        ttk.Button(btn_row, text=t("restore"), style="Ghost.TButton",
+        ttk.Button(btn_row, text=t("restore"), style="PageGhost.TButton",
                    command=self._restore_selected_quarantine).pack(side="left")
-        ttk.Button(btn_row, text=t("delete_permanently"), style="Danger.TButton",
+        ttk.Button(btn_row, text=t("delete_permanently"), style="PageDanger.TButton",
                    command=self._delete_selected_quarantine).pack(side="left", padx=(8, 0))
 
     def _refresh_quarantine(self):

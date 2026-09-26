@@ -15,7 +15,7 @@ import theme as C
 from core import paths, settings, vpn
 from core.i18n import t
 from theme import FONT, FONT_BOLD, FONT_LARGE, FONT_SMALL
-from widgets import RoundedCard, ToggleSwitch, icon_label
+from widgets import RoundedCard, ToggleSwitch, icon_label, pill, set_pill_style
 
 MAP_W, MAP_H = 300, 120
 LAT_TOP, LAT_SPAN = 75.0, 131.0  # the dot grid covers 75N..56S
@@ -58,7 +58,7 @@ class VpnPage(tk.Frame):
         super().__init__(parent, bg=C.BG)
         self.app = app
         self.state = app.vpn_state  # survives page rebuilds
-        tk.Label(self, text=t("nav_vpn"), font=("Segoe UI Semibold", 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
+        tk.Label(self, text=t("nav_vpn"), font=(C.DISPLAY, 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
         tk.Label(self, text=t("vpn_sub"), font=FONT, fg=C.TEXT_MUTED, bg=C.BG).pack(anchor="w", pady=(2, 18))
         self._build_main_card()
         self.lower = tk.Frame(self, bg=C.BG)
@@ -97,8 +97,7 @@ class VpnPage(tk.Frame):
         mid.grid(row=1, column=0, sticky="ew", pady=(18, 0))
         loc = RoundedCard(mid, bg=C.BG, outer=C.CARD, radius=12, padx=14, pady=10)
         loc.pack(side="left", anchor="n")
-        self.country_pill = tk.Label(loc.body, text="", font=("Segoe UI Semibold", 9), bg=C.ACCENT_DARK,
-                                     fg=C.ON_ACCENT, padx=7, pady=2)
+        self.country_pill = pill(loc.body, "", C.ACCENT_DARK, fg=C.ON_ACCENT, outer=C.BG, font=(C.UI_SEMIBOLD, 9))
         self.country_pill.pack(side="left", padx=(0, 10))
         self.server_label = tk.Label(loc.body, text="", font=FONT_BOLD, fg=C.TEXT, bg=C.BG)
         self.server_label.pack(side="left")
@@ -131,7 +130,8 @@ class VpnPage(tk.Frame):
         self.badge_icon.configure(fg=C.GOOD if connected else C.TEXT_MUTED)
 
         if info:
-            self.country_pill.configure(text=info.get("country") or "VPN")
+            set_pill_style(self.country_pill, info.get("country") or "VPN", C.ACCENT_DARK, fg=C.ON_ACCENT,
+                           outer=C.BG, font=(C.UI_SEMIBOLD, 9))
             self.country_pill.pack(side="left", padx=(0, 10), before=self.server_label)
             self.server_label.configure(text=info.get("city") and f"{info['city']} · {info['server']}"
                                         or info.get("server", ""))

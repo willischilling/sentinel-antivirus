@@ -17,7 +17,7 @@ from core import apps as apps_module
 from core import firewall
 from core.i18n import t
 from theme import FONT, FONT_BOLD, FONT_LARGE, FONT_SMALL
-from widgets import Ring, RoundedCard, icon_label
+from widgets import Ring, RoundedCard, icon_label, pill
 
 
 class FirewallPage(tk.Frame):
@@ -25,7 +25,7 @@ class FirewallPage(tk.Frame):
         super().__init__(parent, bg=C.BG)
         self.app = app
         self.state = app.fw_state  # survives page rebuilds
-        tk.Label(self, text=t("nav_firewall"), font=("Segoe UI Semibold", 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
+        tk.Label(self, text=t("nav_firewall"), font=(C.DISPLAY, 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
         tk.Label(self, text=t("fw_sub"), font=FONT, fg=C.TEXT_MUTED, bg=C.BG).pack(anchor="w", pady=(2, 14))
 
         tabs = tk.Frame(self, bg=C.BG)
@@ -123,8 +123,7 @@ class FirewallPage(tk.Frame):
             line.pack(fill="x", pady=(12, 0))
             icon_label(line, icon, 14, fg=C.TEXT).pack(side="left", padx=(0, 10))
             tk.Label(line, text=t(label), font=FONT, fg=C.TEXT, bg=C.CARD).pack(side="left")
-            tk.Label(line, text=t(value), font=("Segoe UI Semibold", 8), fg="#0b1120", bg=color,
-                     padx=9, pady=2).pack(side="right")
+            pill(line, t(value), color).pack(side="right")
         if st.network_name:
             tk.Label(left.body, text=t("fw_network_name", name=st.network_name), font=FONT_SMALL,
                      fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="e", pady=(4, 0))
@@ -138,7 +137,7 @@ class FirewallPage(tk.Frame):
         tk.Label(right.body, text=t("fw_title"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack()
         word, color = (("fw_lockdown_word", C.BAD) if st.mode == "lockdown" else
                        ("fw_active", C.GOOD) if st.enabled else ("fw_off", C.BAD))
-        tk.Label(right.body, text=t(word), font=("Segoe UI Semibold", 16), fg=color, bg=C.CARD).pack()
+        tk.Label(right.body, text=t(word), font=(C.DISPLAY, 16), fg=color, bg=C.CARD).pack()
         if self.state["busy"]:
             tk.Label(right.body, text=t("fw_working"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(pady=(6, 0))
         elif not st.all_enabled:
@@ -167,10 +166,9 @@ class FirewallPage(tk.Frame):
 
         search_row = tk.Frame(card.body, bg=C.CARD)
         search_row.pack(fill="x", pady=(14, 8))
-        box = tk.Frame(search_row, bg=C.BORDER)
+        box = RoundedCard(search_row, bg=C.BG, outer=C.CARD, radius=8, padx=8, pady=2)
         box.pack(side="left", fill="x", expand=True)
-        inner = tk.Frame(box, bg=C.BG)
-        inner.pack(fill="x", padx=1, pady=1)
+        inner = box.body
         icon_label(inner, "scan", 11, fg=C.TEXT_MUTED, bg=C.BG).pack(side="left", padx=(10, 4))
         self.search = tk.Entry(inner, font=FONT, bg=C.BG, fg=C.TEXT, insertbackground=C.TEXT, relief="flat", bd=0,
                                highlightthickness=0)
@@ -241,11 +239,9 @@ class FirewallPage(tk.Frame):
             tk.Label(title, text=name, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
             gaps = bool(rule and getattr(rule, "gaps", None))
             if rule:
-                tk.Label(title, text=t("fw_blocked_pill"), font=("Segoe UI Semibold", 8), fg="#0b1120", bg=C.BAD,
-                         padx=7, pady=1).pack(side="left", padx=(8, 0))
+                pill(title, t("fw_blocked_pill"), C.BAD).pack(side="left", padx=(8, 0))
             if gaps:  # e.g. the app updated itself into a new folder the rules don't cover yet
-                tk.Label(title, text=t("fw_updated_pill"), font=("Segoe UI Semibold", 8), fg="#0b1120", bg=C.WARN,
-                         padx=7, pady=1).pack(side="left", padx=(6, 0))
+                pill(title, t("fw_updated_pill"), C.WARN).pack(side="left", padx=(6, 0))
             tk.Label(text, text=_shorten(path, 70), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
             buttons = []
             if rule:
