@@ -202,16 +202,15 @@ class FirewallPage(tk.Frame):
     def _entries(self):
         """(name, path, icon, blocked rule name or None) for every app, blocked first."""
         st: firewall.FirewallStatus = self.state["status"]
-        rules = {os.path.normcase(b.path): b.name for b in st.blocked_apps}
+        rules = {os.path.normcase(b.path): b for b in st.blocked_apps}
         entries, listed = [], set()
         for app in self.state["apps"] or []:
             key = os.path.normcase(app.path)
             listed.add(key)
             entries.append((app.name, app.path, app.icon_png, rules.get(key)))
-        for key, rule in rules.items():  # blocked through Browse, or no longer installed
+        for key, blocked in rules.items():  # blocked through Browse, or no longer installed
             if key not in listed:
-                path = next(b.path for b in st.blocked_apps if b.name == rule)
-                entries.append((Path(path).stem, path, None, rule))
+                entries.append((Path(blocked.path).stem, blocked.path, None, blocked))
         return sorted(entries, key=lambda e: (e[3] is None, e[0].lower()))
 
     def _fill_rows(self):
@@ -240,19 +239,25 @@ class FirewallPage(tk.Frame):
             title = tk.Frame(text, bg=C.CARD)
             title.pack(anchor="w")
             tk.Label(title, text=name, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
+            gaps = bool(rule and getattr(rule, "gaps", None))
             if rule:
                 tk.Label(title, text=t("fw_blocked_pill"), font=("Segoe UI Semibold", 8), fg="#0b1120", bg=C.BAD,
                          padx=7, pady=1).pack(side="left", padx=(8, 0))
+            if gaps:  # e.g. the app updated itself into a new folder the rules don't cover yet
+                tk.Label(title, text=t("fw_updated_pill"), font=("Segoe UI Semibold", 8), fg="#0b1120", bg=C.WARN,
+                         padx=7, pady=1).pack(side="left", padx=(6, 0))
             tk.Label(text, text=_shorten(path, 70), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
+            buttons = []
             if rule:
-                btn = ttk.Button(row, text=t("fw_unblock"), style="Ghost.TButton",
-                                 command=lambda r=rule: self._change(lambda: firewall.unblock_app(r)))
-            else:
-                btn = ttk.Button(row, text=t("fw_block"), style="Danger.TButton",
-                                 command=lambda p=path: self._change(lambda: firewall.block_app(p)))
-            btn.pack(side="right", padx=(10, 4))
-            if busy:
-                btn.state(["disabled"])
+                buttons.append(ttk.Button(row, text=t("fw_unblock"), style="Ghost.TButton",
+                                          command=lambda r=rule.name: self._change(lambda: firewall.unblock_app(r))))
+            if not rule or gaps:
+                buttons.append(ttk.Button(row, text=t("fw_block_again" if gaps else "fw_block"), style="Danger.TButton",
+                                          command=lambda p=path, n=name: self._block(p, n)))
+            for btn in buttons:
+                btn.pack(side="right", padx=(10, 4) if btn is buttons[0] else (0, 0))
+                if busy:
+                    btn.state(["disabled"])
             for widget in (row, text, title):
                 widget.bind("<Enter>", lambda e: self.list_canvas.bind_all("<MouseWheel>", self._wheel))
 
@@ -310,9 +315,17 @@ class FirewallPage(tk.Frame):
     def _block_app(self):
         path = filedialog.askopenfilename(title=t("fw_block_app"), filetypes=[(t("fw_programs"), "*.exe")])
         if path:
-            self._change(lambda: firewall.block_app(str(Path(path))))
+            self._block(str(Path(path)), Path(path).stem)
 
-    def _change(self, action):
+    def _block(self, path, name):
+        def after():
+            # The firewall only stops new connections; if the app is open, offer to close it.
+            running = firewall.running_processes(firewall.related_exes(path))
+            return ("fw_running", (name, [proc.pid for proc in running])) if running else None
+
+        self._change(lambda: firewall.block_app(path), after=after)
+
+    def _change(self, action, after=None):
         if self.state["busy"]:
             return
         self.state.update(busy=True, error=None)
@@ -327,6 +340,10 @@ class FirewallPage(tk.Frame):
                 error = str(e)
             queue.put(("fw_done", error))
             self._read(queue)
+            if after and error is None:
+                message = after()
+                if message:
+                    queue.put(message)
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -336,7 +353,10 @@ class FirewallPage(tk.Frame):
     @staticmethod
     def _read(queue):
         try:
-            queue.put(("fw_status", firewall.status()))
+            status = firewall.status()
+            for blocked in status.blocked_apps:
+                blocked.gaps = blocked.missing()
+            queue.put(("fw_status", status))
         except Exception as e:
             queue.put(("fw_read_failed", str(e)))
 
@@ -351,8 +371,27 @@ class FirewallPage(tk.Frame):
             s.update(apps=payload, apps_loading=False)
         elif kind == "fw_read_failed":
             s["error"] = payload
+        elif kind == "fw_running":
+            name, pids = payload
+            if messagebox.askyesno("Sentinel", t("fw_close_app", name=name)):
+                threading.Thread(target=_close, args=(pids,), daemon=True).start()
+            return
         if self.winfo_exists():
             self._render()
+
+
+def _close(pids):
+    import psutil
+
+    procs = []
+    for pid in pids:
+        try:
+            proc = psutil.Process(pid)
+            proc.terminate()
+            procs.append(proc)
+        except psutil.Error:
+            pass
+    psutil.wait_procs(procs, timeout=5)
 
 
 def _shorten(text, limit):

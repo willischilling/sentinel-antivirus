@@ -28,7 +28,8 @@ $profiles = foreach ($p in 1, 2, 4) {
   [pscustomobject]@{ type = $p; on = $fw.FirewallEnabled($p); inAct = $fw.DefaultInboundAction($p);
                      outAct = $fw.DefaultOutboundAction($p); blockAll = $fw.BlockAllInboundTraffic($p) } }
 $rules = @($fw.Rules | Where-Object { $_.Grouping -eq '%GROUP%' } | ForEach-Object {
-  [pscustomobject]@{ name = $_.Name; app = $_.ApplicationName; dir = $_.Direction; on = $_.Enabled } })
+  [pscustomobject]@{ name = $_.Name; app = $_.ApplicationName; desc = $_.Description; dir = $_.Direction;
+                     on = $_.Enabled } })
 $net = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | ForEach-Object {
   [pscustomobject]@{ name = $_.Name; category = "$($_.NetworkCategory)" } })
 [pscustomobject]@{ current = $fw.CurrentProfileTypes; profiles = @($profiles); rules = $rules; networks = $net } |
@@ -38,8 +39,14 @@ $net = @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | ForEach-Object
 
 @dataclass
 class BlockedApp:
-    name: str      # rule name (shared by the inbound and outbound rule)
-    path: str
+    name: str      # rule name (shared by all of this app's rules)
+    path: str      # the program that was picked
+    covered: set = field(default_factory=set)  # every program file its rules block (normcased)
+
+    def missing(self) -> list[str]:
+        """Program files of this app that its rules don't cover (e.g. after it updated itself
+        into a new version folder)."""
+        return [exe for exe in related_exes(self.path) if os.path.normcase(exe) not in self.covered]
 
 
 @dataclass
@@ -80,11 +87,14 @@ def status() -> FirewallStatus:
     current = [t for t in PROFILES if data["current"] & t] or [4]
     active = [profiles[t] for t in current]
     rules = data.get("rules") or []
-    blocked, seen = [], set()
+    by_name: dict[str, BlockedApp] = {}
     for rule in rules:
-        if rule["name"].startswith(BLOCK_PREFIX) and rule["name"] not in seen:
-            seen.add(rule["name"])
-            blocked.append(BlockedApp(rule["name"], rule.get("app") or ""))
+        if not rule["name"].startswith(BLOCK_PREFIX):
+            continue
+        app = by_name.setdefault(rule["name"], BlockedApp(rule["name"], rule.get("desc") or rule.get("app") or ""))
+        if rule.get("app"):
+            app.covered.add(os.path.normcase(rule["app"]))
+    blocked = list(by_name.values())
     networks = data.get("networks") or []
     return FirewallStatus(
         enabled=all(p["on"] for p in active),
@@ -119,6 +129,52 @@ def _elevated(*args):
     from . import elevate
 
     elevate.run("firewall", *args)
+
+
+def related_exes(path: str, limit: int = 60) -> list[str]:
+    """The program files that make up an app, starting from the one the user picked.
+
+    Many apps start through a small launcher and run the real program from a version
+    folder: Discord's shortcut opens Discord\\Discord.exe, but the app that connects is
+    Discord\\app-1.0.9259\\Discord.exe. So this returns the picked program, copies of it
+    (same file name) in folders below it, and for Squirrel-installed apps (Discord, Slack,
+    Teams...: an Update.exe next to app-* folders) the helper programs in those folders.
+    It never widens to other programs in shared folders, so blocking Word doesn't block Excel.
+    """
+    picked = Path(path)
+    found = [str(picked)]
+    base = picked.parent
+    windows = os.path.normcase(os.environ.get("SystemRoot", r"C:\Windows"))
+    if not base.is_dir() or os.path.normcase(str(base)).startswith(windows):
+        return found
+    squirrel = (base / "Update.exe").is_file() and any(base.glob("app-*"))
+    seen = {os.path.normcase(str(picked))}
+    for depth_glob in ("*/*.exe", "*/*/*.exe", "*/*/*/*.exe"):
+        for exe in base.glob(depth_glob):
+            key = os.path.normcase(str(exe))
+            if key in seen:
+                continue
+            same_name = exe.name.lower() == picked.name.lower()
+            helper = squirrel and exe.relative_to(base).parts[0].lower().startswith("app-")
+            if same_name or helper:
+                seen.add(key)
+                found.append(str(exe))
+                if len(found) >= limit:
+                    return found
+    return found
+
+
+def running_processes(paths) -> list:
+    """Running processes started from any of these program files."""
+    import psutil
+
+    wanted = {os.path.normcase(p) for p in paths}
+    procs = []
+    for proc in psutil.process_iter(["exe"]):
+        exe = proc.info.get("exe")
+        if exe and os.path.normcase(exe) in wanted:
+            procs.append(proc)
+    return procs
 
 
 def rule_name_for(path: str) -> str:
@@ -169,7 +225,9 @@ def elevated(action: str, args: list[str]):
         if os.path.normcase(path).startswith(windows):
             raise RuntimeError("Windows' own programs can't be blocked here; it could break Windows")
         name = rule_name_for(path)
-        script += [_remove_rules(name), _new_rule(name, 1, path, path), _new_rule(name, 2, path, path)]
+        script.append(_remove_rules(name))
+        for exe in related_exes(path):  # the picked program plus its real/versioned copies
+            script += [_new_rule(name, 1, exe, path), _new_rule(name, 2, exe, path)]
     elif action == "unblock" and args and args[0].startswith(BLOCK_PREFIX):
         script.append(_remove_rules(args[0]))
     else:
