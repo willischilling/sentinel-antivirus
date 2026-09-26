@@ -18,7 +18,7 @@ from core import (
     activity, app_update, autostart, database, i18n, paths, quarantine, scanner, settings, signatures,
     threat_intel,
 )
-from core.i18n import number, plural, t
+from core.i18n import duration, number, plural, relative, t
 from core.version import VERSION
 import theme as C
 from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE
@@ -499,6 +499,8 @@ class App(tk.Tk):
             messagebox.showerror("Sentinel", t("folder_missing", path=target))
             return
         self._scanning = True
+        self._close_scan_summary()
+        self._scan_started = datetime.now().astimezone()
         self.scan_tree.delete(*self.scan_tree.get_children())
         self._scan_result_map.clear()
         self.scan_empty.hide()
@@ -509,8 +511,11 @@ class App(tk.Tk):
 
     def _scan_worker(self, target: Path):
         total = flagged = 0
+        counts = {"signature_match": 0, "suspicious": 0, "error": 0}
         for result in scanner.scan_directory(target, recursive=True):
             total += 1
+            if result.verdict in counts:
+                counts[result.verdict] += 1
             if result.verdict in ("signature_match", "suspicious"):
                 flagged += 1
                 self.event_queue.put(("scan_result", result))
@@ -518,7 +523,7 @@ class App(tk.Tk):
                 self.event_queue.put(("scan_result", result))
             if total % 25 == 0:
                 self.event_queue.put(("scan_progress", (total, flagged)))
-        self.event_queue.put(("scan_done", (target, total, flagged)))
+        self.event_queue.put(("scan_done", (target, total, flagged, counts)))
 
     def _on_scan_result(self, result):
         if result.verdict == "signature_match":
@@ -539,7 +544,7 @@ class App(tk.Tk):
             text=t("flagged_so_far", n=number(flagged)) if flagged else t("nothing_flagged_so_far"))
 
     def _on_scan_done(self, payload):
-        target, total, flagged = payload
+        target, total, flagged, counts = payload
         self._scanning = False
         self.scan_btn.configure(state="normal", text=t("scan_now"))
         if flagged:
@@ -555,6 +560,81 @@ class App(tk.Tk):
                                  "files": total, "flagged": flagged, "path": str(target)})
         self.settings = settings.load()
         self._refresh_dashboard()
+        self._show_scan_summary(target, total, counts)
+
+    # ------------------------------------------------------ scan summary --
+    def _show_scan_summary(self, target: Path, total: int, counts: dict):
+        """A summary card over the scanner page, shown when a scan finishes."""
+        self._close_scan_summary()
+        finished = datetime.now().astimezone()
+        seconds = int((finished - self._scan_started).total_seconds())
+        threats, suspicious, unreadable = counts["signature_match"], counts["suspicious"], counts["error"]
+
+        overlay = tk.Frame(self.pages["scan"], bg=C.BG)
+        overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._scan_summary = overlay
+        card = RoundedCard(overlay, outer=C.BG, radius=18, padx=30, pady=24)
+        card.place(relx=0.5, rely=0.5, anchor="center", width=420)
+        body = card.body
+
+        ring = Ring(body, size=72)
+        ring.pack()
+        if threats:
+            ring.show(C.BAD, glyph="warning")
+        elif suspicious:
+            ring.show(C.WARN, glyph="warning")
+        else:
+            ring.show(C.GOOD, glyph="check")
+        tk.Label(body, text=t("summary_title"), font=FONT_TITLE, fg=C.TEXT, bg=C.CARD).pack(pady=(10, 0))
+        tk.Label(body, text=relative(finished), font=FONT, fg=C.TEXT_MUTED, bg=C.CARD).pack(pady=(2, 10))
+
+        def divider():
+            tk.Frame(body, bg=C.BORDER, height=1).pack(fill="x", pady=7)
+
+        def row(label, value, color=None):
+            line = tk.Frame(body, bg=C.CARD)
+            line.pack(fill="x", pady=2)
+            tk.Label(line, text=label, font=FONT, fg=C.TEXT, bg=C.CARD).pack(side="left")
+            tk.Label(line, text=value, font=FONT_BOLD if color else FONT, fg=color or C.TEXT,
+                     bg=C.CARD).pack(side="right")
+
+        divider()
+        row(t("summary_duration"), duration(seconds))
+        row(t("summary_files"), number(total))
+        row(t("summary_folder"), shorten(target.name or str(target), 34))
+        divider()
+        row(t("summary_threats"), number(threats), C.BAD if threats else None)
+        row(t("summary_suspicious"), number(suspicious), C.WARN if suspicious else None)
+        row(t("summary_unreadable"), number(unreadable))
+        divider()
+
+        buttons = tk.Frame(body, bg=C.CARD)
+        buttons.pack(fill="x", pady=(14, 0))
+        ttk.Button(buttons, text=t("summary_view"), style="Ghost.TButton",
+                   command=self._view_scan_results).pack(side="left", fill="x", expand=True, padx=(0, 6))
+        done = ttk.Button(buttons, text=t("summary_done"), style="Accent.TButton",
+                          command=self._finish_scan_summary)
+        done.pack(side="left", fill="x", expand=True, padx=(6, 0))
+        done.focus_set()
+        done.bind("<Escape>", lambda e: self._close_scan_summary())
+
+    def _close_scan_summary(self):
+        overlay = getattr(self, "_scan_summary", None)
+        if overlay is not None and overlay.winfo_exists():
+            overlay.destroy()
+        self._scan_summary = None
+
+    def _view_scan_results(self):
+        self._close_scan_summary()
+        flagged = [i for i in self.scan_tree.get_children() if i in self._scan_result_map]
+        if flagged:
+            self.scan_tree.selection_set(flagged[0])
+            self.scan_tree.see(flagged[0])
+            self.scan_tree.focus_set()
+
+    def _finish_scan_summary(self):
+        self._close_scan_summary()
+        self._show_page("dashboard")
 
     def _quarantine_selected_scan_results(self):
         selected = [i for i in self.scan_tree.selection() if i in self._scan_result_map]

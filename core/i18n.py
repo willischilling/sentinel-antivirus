@@ -78,6 +78,17 @@ def time_of_day(moment: datetime) -> str:
     return moment.strftime("%H:%M")
 
 
+def duration(seconds: int) -> str:
+    """'45s' / '10m 11s' / '1h 5m', in the current language."""
+    minutes, secs = divmod(max(0, int(seconds)), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return t("duration_hm", h=hours, m=minutes)
+    if minutes:
+        return t("duration_ms", m=minutes, s=secs)
+    return t("duration_s", s=secs)
+
+
 def relative(moment: datetime) -> str:
     """'Today, 7:28 PM' / 'Yesterday, ...' / a date, in the current language."""
     now = datetime.now(moment.tzinfo)
