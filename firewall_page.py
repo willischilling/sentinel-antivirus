@@ -218,7 +218,8 @@ class FirewallPage(tk.Frame):
         for child in self.rows.winfo_children():
             child.destroy()
         query = self.state["query"].strip().lower()
-        entries = [e for e in self._entries() if not query or query in e[0].lower() or query in e[1].lower()]
+        entries = [e for e in self._entries()  # name or program file, not the whole path
+                   if not query or query in e[0].lower() or query in Path(e[1]).name.lower()]
         blocked = sum(1 for e in entries if e[3])
         self.count_label.configure(text=t("fw_apps_count", n=len(entries), blocked=blocked))
         if self.state["apps"] is None:

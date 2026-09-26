@@ -259,6 +259,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 
 /* firewall */
+.fw-card[hidden], .fw-apps[hidden] { display: none; }
 .fw-card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; box-shadow: var(--shot-shadow); display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; }
 .fw-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 14px; }
 .fw-mode { text-align: left; border: 0; border-radius: 10px; padding: 11px 12px; background: var(--panel); color: var(--text); cursor: pointer; font: inherit; }
@@ -277,6 +278,27 @@ footer p { margin: 0; max-width: 70ch; }
 .fw-card.lockdown .fw-ring { border-color: var(--warn); color: var(--warn); }
 .fw-card.lockdown .fw-state { color: var(--bad); }
 @media (max-width: 960px) { .fw-card { grid-template-columns: 1fr; } .fw-side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 18px; } }
+
+
+.fw-wrap { min-width: 0; }
+.fw-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.fw-tabs button { background: none; border: 0; padding: 8px 2px; font: 600 14px "IBM Plex Sans", sans-serif; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.fw-tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.fw-apps { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shot-shadow); }
+.fw-apps-head { display: flex; gap: 10px; align-items: center; }
+.fw-search { flex: 1; display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; }
+.fw-search input { flex: 1; background: none; border: 0; outline: 0; color: var(--text); font: 14px "IBM Plex Sans", sans-serif; padding: 9px 0; min-width: 0; }
+.fw-search svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
+.fw-browse { border: 0; border-radius: 8px; padding: 9px 14px; background: var(--accent-strong); color: #fff; font: 600 13.5px "IBM Plex Sans", sans-serif; cursor: pointer; white-space: nowrap; }
+.fw-count { font: 12px "IBM Plex Mono", monospace; color: var(--muted); margin: 10px 0 4px; }
+.fw-list { max-height: 292px; overflow-y: auto; margin-right: -8px; padding-right: 8px; }
+.fw-app { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.fw-app .ic { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; font: 700 13px "Archivo", sans-serif; color: #fff; }
+.fw-app .nm { font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.fw-app .pt { font: 11.5px "IBM Plex Mono", monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fw-app .tagb { font: 600 10px "IBM Plex Mono", monospace; background: var(--bad); color: #0b1120; padding: 2px 6px; border-radius: 4px; }
+.fw-app button { border-radius: 7px; padding: 7px 12px; font: 600 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; background: transparent; border: 1px solid var(--line); color: var(--bad); }
+.fw-app button.un { color: var(--text); }
 
 @media (max-width: 960px) {
   .hero .wrap, .split, .install { grid-template-columns: 1fr; }
@@ -458,10 +480,15 @@ footer p { margin: 0; max-width: 70ch; }
       <p class="lede" style="margin-top:22px">A clear control panel for the Windows Firewall that's already on your PC. It's a real kernel-level filter, just without the 400-rule settings window.</p>
       <ul class="ask-points">
         <li><b>Standard or Lockdown</b><span>Standard blocks incoming connections. Lockdown cuts every connection in and out with one click, for when you think something's wrong.</span></li>
-        <li><b>Block any app</b><span>Pick a program and it can't reach the internet or accept connections. Unblock it any time.</span></li>
+        <li><b>Block any app</b><span>Every app on your PC is listed with its icon and a Block button, blocked ones on top. Search it, or Browse for anything else. Unblock any time.</span></li>
         <li><b>Nothing hidden</b><span>Every rule Sentinel adds is labeled "Sentinel Antivirus" in Windows' own firewall settings, and uninstalling removes them all.</span></li>
       </ul>
     </div>
+    <div class="fw-wrap">
+      <div class="fw-tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-fwtab="overview">Overview</button>
+        <button role="tab" aria-selected="false" data-fwtab="apps">Blocked apps</button>
+      </div>
     <div class="fw-card" id="fw-card">
       <div>
         <div style="font-weight:600">Mode</div>
@@ -479,6 +506,15 @@ footer p { margin: 0; max-width: 70ch; }
         <div style="font-weight:600;margin-top:12px">Firewall</div>
         <div class="fw-state" id="fw-state">Active</div>
       </div>
+    </div>
+    <div class="fw-apps" id="fw-apps" hidden>
+      <div class="fw-apps-head">
+        <label class="fw-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><input id="fw-q" placeholder="Search apps" aria-label="Search apps"></label>
+        <button class="fw-browse" type="button" title="Opens File Explorer in the app">Browse...</button>
+      </div>
+      <div class="fw-count" id="fw-count"></div>
+      <div class="fw-list" id="fw-list"></div>
+    </div>
     </div>
   </div>
 </section>
@@ -823,6 +859,51 @@ document.querySelectorAll("[data-fw]").forEach(b => b.addEventListener("click", 
   out.textContent = lock ? "Block" : "Allow";
   out.className = "fw-pill " + (lock ? "bad" : "warn");
   document.getElementById("fw-state").textContent = lock ? "Lockdown" : "Active";
+}));
+
+// ---- Firewall app list demo (example apps; the real one lists what's installed) ----
+const fwApps = [
+  ["Brave", "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe", "#fb542b"],
+  ["Discord", "C:\\Users\\you\\AppData\\Local\\Discord\\Discord.exe", "#5865f2"],
+  ["Free VPN Pro", "C:\\Users\\you\\Downloads\\FreeVPNPro\\freevpn.exe", "#e11d48", true],
+  ["Google Chrome", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "#1a73e8"],
+  ["OBS Studio", "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe", "#302e31"],
+  ["Roblox", "C:\\Program Files (x86)\\Roblox\\RobloxPlayerBeta.exe", "#e2231a"],
+  ["Spotify", "C:\\Users\\you\\AppData\\Roaming\\Spotify\\Spotify.exe", "#1db954"],
+  ["Steam", "C:\\Program Files (x86)\\Steam\\steam.exe", "#1b2838"],
+  ["VLC media player", "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe", "#f08000"],
+  ["WinRAR", "C:\\Program Files\\WinRAR\\WinRAR.exe", "#7b3f9e"],
+  ["Zoom", "C:\\Users\\you\\AppData\\Roaming\\Zoom\\bin\\Zoom.exe", "#2d8cff"],
+].map(([name, path, color, blocked]) => ({ name, path, color, blocked: !!blocked }));
+const fwList = document.getElementById("fw-list"), fwQ = document.getElementById("fw-q");
+function drawApps() {
+  const q = fwQ.value.trim().toLowerCase();
+  const shown = fwApps.filter(a => !q || a.name.toLowerCase().includes(q) || a.path.split("\\").pop().toLowerCase().includes(q))
+    .sort((a, b) => (b.blocked - a.blocked) || a.name.localeCompare(b.name));
+  document.getElementById("fw-count").textContent =
+    `${shown.length} apps · ${shown.filter(a => a.blocked).length} blocked`;
+  fwList.innerHTML = "";
+  if (!shown.length) fwList.appendChild(el("div", "fw-count", "No apps match your search."));
+  shown.forEach(a => {
+    const row = el("div", "fw-app");
+    const ic = el("div", "ic", a.name[0]); ic.style.background = a.color;
+    const txt = el("div"); txt.style.minWidth = "0";
+    const nm = el("div", "nm"); nm.appendChild(el("span", null, a.name));
+    if (a.blocked) nm.appendChild(el("span", "tagb", "BLOCKED"));
+    txt.append(nm, el("div", "pt", a.path));
+    const btn = el("button", a.blocked ? "un" : "", a.blocked ? "Unblock" : "Block");
+    btn.addEventListener("click", () => { a.blocked = !a.blocked; drawApps(); });
+    row.append(ic, txt, btn);
+    fwList.appendChild(row);
+  });
+}
+fwQ.addEventListener("input", drawApps);
+drawApps();
+document.querySelectorAll("[data-fwtab]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-fwtab]").forEach(x => x.setAttribute("aria-selected", x === b));
+  const apps = b.dataset.fwtab === "apps";
+  document.getElementById("fw-card").hidden = apps;
+  document.getElementById("fw-apps").hidden = !apps;
 }));
 
 // ---- latest release details from GitHub ----
