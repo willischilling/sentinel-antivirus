@@ -82,6 +82,19 @@ A VPN tab with an on/off switch, the server's location on a world map, and your 
 - **IP and location:** looked up with [ipwho.is](https://ipwho.is/), which sees only the request itself, the same as any website you visit.
 - **Clean up:** **Remove VPN** in the tab, or uninstalling Sentinel, deletes the tunnel and its config with one admin prompt. WireGuard itself stays installed.
 
+### Web protection
+Blocks scam, phishing and malware websites in every browser and app, by sending Windows' website lookups (DNS) through a free filtering service:
+
+- **Standard (recommended):** [Quad9](https://quad9.net/), a Swiss non-profit that blocks malware and phishing domains and doesn't log IP addresses.
+- **Family:** [Cloudflare for Families](https://one.one.one.one/family/), which also blocks adult sites.
+
+How it works:
+- **Turning it on** sets the DNS servers of the PC's physical network adapters, after one admin prompt.
+- **Turning it off** puts each adapter back exactly as it was, automatic (from the router) or a fixed address. Those previous settings are saved in an admin-only folder.
+- **"Check it's working"** looks up the provider's own test site, which is only blocked when the filter is really in use. That catches a router or another app overriding it.
+- **"Apply again"** appears if a network adapter isn't using the filter.
+- **Uninstalling Sentinel** turns it off too.
+
 ### Firewall
 A control panel for the built-in **Windows Firewall**, a real kernel-level filter. Sentinel doesn't add a firewall of its own.
 
@@ -93,6 +106,10 @@ A control panel for the built-in **Windows Firewall**, a real kernel-level filte
 - **How it's built:** changes go through Windows' firewall interface (`HNetCfg.FwPolicy2`), and each one shows the Windows admin prompt. The admin side only accepts these fixed actions, with checked arguments.
 - **Easy to find:** every rule Sentinel creates is in the "Sentinel Antivirus" group, so you can see them in Windows' own firewall settings.
 - **Clean up:** uninstalling Sentinel removes all of its rules and turns Lockdown off, together with the VPN cleanup, in one prompt.
+
+### Scheduled scans and app updates
+- **Scheduled scans:** set on the Scanner page (off, daily or weekly, at a chosen time). The background agent quietly scans Downloads, Desktop and Documents at a lower CPU and disk priority. A scan missed while the PC was off runs at the next sign-in. Anything found gets the usual popup, and clean scans just update "Last scan".
+- **Out-of-date apps:** out-of-date apps are one of the most common ways into a PC. The Updates tab lists every app Windows' package manager ([winget](https://learn.microsoft.com/windows/package-manager/)) knows a newer version of, using only the `winget` source, whose installers are verified by hash. Each app gets an **Update** button, and there's an **Update all**.
 
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
@@ -185,6 +202,9 @@ core/app_update.py ── checks GitHub for new releases, downloads and verifies
 ask_page.py, core/scam_check.py, core/link_intel.py, core/assistant.py ── Ask Sentinel: chat tab, built-in checks, link lists, local AI
 vpn_page.py, core/vpn.py ── Sentinel VPN: the tab, and WireGuard setup/start/stop
 firewall_page.py, core/firewall.py ── Firewall: Windows Firewall modes and blocked apps
+webprotect_page.py, core/webprotect.py ── Web protection: DNS filtering (Quad9 / Cloudflare)
+app_updates_card.py, core/app_updates.py ── Out-of-date apps via winget
+core/schedule.py ── Scheduled quick scans
 theme.py ── dark and light palettes, swapped live
 ```
 

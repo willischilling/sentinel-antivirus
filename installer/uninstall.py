@@ -110,7 +110,7 @@ def remove_system_changes():
     import base64
     import ctypes
 
-    from core import elevate, firewall, vpn
+    from core import elevate, firewall, vpn, webprotect
 
     script = []
     if vpn.status() != "not_setup" or vpn.PROGRAM_DATA.exists():
@@ -130,8 +130,17 @@ def remove_system_changes():
                       "{ $fw.Rules.Remove($n) } }")
         if fw is None or fw.lockdown:  # Lockdown also blocks all incoming traffic; undo that too
             script += [f"$fw.BlockAllInboundTraffic({t}) = $false" for t in firewall.PROFILES]
+    try:
+        web_on = webprotect.status().on or webprotect.SAVED.exists()
+    except Exception as e:
+        log(f"couldn't read web protection state: {e}")
+        web_on = webprotect.SAVED.exists()
+    if web_on:  # put the network adapters' DNS back the way it was
+        script += webprotect.off_script(webprotect.saved_settings())
+        script.append("Clear-DnsClientCache")
+        script.append(f"Remove-Item -Recurse -Force {firewall._q(str(webprotect.STATE_DIR))} -ErrorAction SilentlyContinue")
     if not script:
-        log("no VPN or firewall changes to undo")
+        log("no VPN, firewall or web protection changes to undo")
         return
     encoded = base64.b64encode("\n".join(script).encode("utf-16-le")).decode()
     info = elevate.SHELLEXECUTEINFOW(cbSize=ctypes.sizeof(elevate.SHELLEXECUTEINFOW),
@@ -147,6 +156,8 @@ def remove_system_changes():
     after = firewall.status()
     if after.blocked_apps or after.lockdown:
         raise RuntimeError("some Sentinel firewall rules are still there")
+    if webprotect.status().on:
+        raise RuntimeError("web protection is still on")
 
 
 def main():

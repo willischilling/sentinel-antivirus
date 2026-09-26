@@ -40,6 +40,7 @@ ICONS = {
     "firewall": "",
     "upload": "",
     "blocked": "",
+    "web": "\ue909",
 }
 _icon_family = None
 
@@ -346,7 +347,7 @@ class NavItem(tk.Frame):
         self.bar = tk.Frame(body, bg=C.PANEL, width=3, height=18)
         self.bar.pack(side="left")
         self.icon = icon_label(body, icon, 13, fg=C.TEXT_MUTED, bg=C.PANEL)
-        self.icon.pack(side="left", padx=(9, 12), pady=9)
+        self.icon.pack(side="left", padx=(9, 12), pady=8)
         self.badge = tk.Label(body, text="●", font=(C.UI, 8), fg=C.ACCENT, bg=C.PANEL)
         self.text = tk.Label(body, text=label, font=FONT, fg=C.TEXT_MUTED, bg=C.PANEL, anchor="w")
         self.text.pack(side="left", fill="x", expand=True)

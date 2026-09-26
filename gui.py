@@ -15,7 +15,7 @@ from tkinter import filedialog, messagebox, ttk
 import launcher
 import single_instance
 from core import (
-    activity, app_update, assistant, autostart, database, i18n, paths, quarantine, scanner, settings,
+    activity, app_update, assistant, autostart, database, i18n, paths, quarantine, scanner, schedule, settings,
     signatures, threat_intel,
 )
 from core.i18n import duration, number, plural, relative, t
@@ -29,6 +29,8 @@ from widgets import (
 from ask_page import AskPage, ChatState
 from vpn_page import VpnPage, new_state as new_vpn_state
 from firewall_page import FirewallPage, new_state as new_fw_state
+from app_updates_card import AppUpdatesCard, new_state as new_appupd_state
+from webprotect_page import WebProtectPage, new_state as new_web_state
 
 
 def configure_style(root: tk.Tk):
@@ -157,6 +159,8 @@ class App(tk.Tk):
         self.ask_state = ChatState()  # the Ask Sentinel conversation, also kept across rebuilds
         self.vpn_state = new_vpn_state()
         self.fw_state = new_fw_state()
+        self.appupd_state = new_appupd_state()
+        self.web_state = new_web_state()
 
         self._build_layout()
         self._show_page("dashboard")
@@ -223,6 +227,7 @@ class App(tk.Tk):
             ("ask", "chat", "nav_ask"),
             ("vpn", "globe", "nav_vpn"),
             ("firewall", "firewall", "nav_firewall"),
+            ("web", "web", "nav_web"),
             ("protection", "shield", "nav_protection"),
             ("quarantine", "lock", "nav_quarantine"),
             ("activity", "history", "nav_history"),
@@ -258,6 +263,8 @@ class App(tk.Tk):
         self.pages["vpn"] = self.vpn_page
         self.firewall_page = FirewallPage(self.content, self)
         self.pages["firewall"] = self.firewall_page
+        self.web_page = WebProtectPage(self.content, self)
+        self.pages["web"] = self.web_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -278,6 +285,10 @@ class App(tk.Tk):
             self._refresh_quarantine()
         elif key == "activity":
             self._refresh_activity()
+        elif key == "updates" and self.appupd_state["items"] is None:
+            self.appupd_card.check()
+        elif key == "web" and not self.web_state["busy"]:
+            self.web_page.refresh()
 
     # ---------------------------------------------------------- dashboard --
     def _build_dashboard_page(self):
@@ -409,6 +420,7 @@ class App(tk.Tk):
         return row
 
     def _refresh_dashboard(self):
+        self.settings = settings.load()  # the agent's scheduled scans update last_scan too
         last = self.settings.get("last_scan")
         if last:
             when = datetime.fromisoformat(last["time"])
@@ -504,8 +516,13 @@ class App(tk.Tk):
         self.scan_status.pack(side="left", padx=(16, 0))
         self._pick_target(self.scan_target.get())
 
+        self.sched_bar = RoundedCard(page, radius=12, padx=20, pady=10)
+        self.sched_bar.pack(fill="x", pady=(12, 0))
+        self._sched_open = False
+        self._render_schedule()
+
         results = RoundedCard(page, radius=16, padx=22, pady=18)
-        results.pack(fill="both", expand=True, pady=(16, 0))
+        results.pack(fill="both", expand=True, pady=(12, 0))
         head = tk.Frame(results.body, bg=C.CARD)
         head.pack(fill="x", pady=(0, 8))
         tk.Label(head, text=t("results"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
@@ -527,6 +544,65 @@ class App(tk.Tk):
         self.scan_empty = EmptyState(table, "scan", t("scan_empty_title"), t("scan_empty_msg"))
         self.scan_empty.show()
         self._scan_result_map = {}
+
+    # ------------------------------------------------------ scheduled scan --
+    def _render_schedule(self):
+        body = self.sched_bar.body
+        for child in body.winfo_children():
+            child.destroy()
+        sch = schedule.get()
+        row = tk.Frame(body, bg=C.CARD)
+        row.pack(fill="x")
+        icon_label(row, "history", 13, fg=C.ACCENT).pack(side="left", padx=(0, 10))
+        tk.Label(row, text=t("sched_title"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
+        nxt = schedule.next_slot(sch, datetime.now())
+        if sch["frequency"] == "off":
+            summary = t("sched_summary_off")
+        else:
+            clock = i18n.time_of_day(datetime.now().replace(hour=sch["hour"], minute=0))
+            summary = (t("sched_summary_daily", time=clock) if sch["frequency"] == "daily"
+                       else t("sched_summary_weekly", day=t(f"day_{sch['weekday']}"), time=clock))
+            summary += "  ·  " + t("sched_next", when=i18n.relative(nxt.astimezone()))
+        tk.Label(row, text=summary, font=FONT, fg=C.TEXT_MUTED, bg=C.CARD).pack(side="left", padx=(12, 0))
+        link = tk.Label(row, text=t("sched_done") if self._sched_open else t("sched_change"), font=FONT,
+                        fg=C.ACCENT, bg=C.CARD, cursor="hand2")
+        link.pack(side="right")
+        link.bind("<Button-1>", lambda e: self._toggle_schedule_editor())
+        if not self._sched_open:
+            return
+        tk.Label(body, text=t("sched_note"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w",
+                                                                                              pady=(8, 2))
+        self._chip_row(body, t("sched_how_often"),
+                       [(t(f"sched_{f}"), sch["frequency"] == f, lambda f=f: self._set_schedule(frequency=f))
+                        for f in schedule.FREQUENCIES])
+        if sch["frequency"] != "off":
+            self._chip_row(body, t("sched_time"),
+                           [(i18n.time_of_day(datetime.now().replace(hour=h, minute=0)), sch["hour"] == h,
+                             lambda h=h: self._set_schedule(hour=h)) for h in schedule.HOURS])
+        if sch["frequency"] == "weekly":
+            self._chip_row(body, t("sched_day"),
+                           [(t(f"day_{d}"), sch["weekday"] == d, lambda d=d: self._set_schedule(weekday=d))
+                            for d in range(7)])
+
+    def _chip_row(self, parent, label, chips):
+        row = tk.Frame(parent, bg=C.CARD)
+        row.pack(fill="x", pady=(6, 0))
+        tk.Label(row, text=label, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, width=14, anchor="w").pack(side="left")
+        for text, selected, command in chips:
+            bg = C.ACCENT_DARK if selected else C.BORDER
+            chip = RoundedCard(row, bg=bg, outer=C.CARD, radius=8, padx=10, pady=4,
+                               hover_bg=None if selected else C.CARD_HOVER, command=None if selected else command)
+            tk.Label(chip.body, text=text, font=FONT_SMALL, fg=C.ON_ACCENT if selected else C.TEXT,
+                     bg=bg).pack()
+            chip.pack(side="left", padx=(0, 6))
+
+    def _toggle_schedule_editor(self):
+        self._sched_open = not self._sched_open
+        self._render_schedule()
+
+    def _set_schedule(self, **changes):
+        schedule.save(**changes)
+        self._render_schedule()
 
     def _pick_target(self, folder):
         self.scan_target.set(folder)
@@ -1032,6 +1108,9 @@ class App(tk.Tk):
         tk.Label(card.body, text=t("installed_version", version=VERSION), font=FONT_SMALL,
                  fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w", pady=(14, 0))
 
+        self.appupd_card = AppUpdatesCard(page, self)  # other apps with updates (winget)
+        self.appupd_card.pack(fill="both", expand=True, pady=(14, 0))
+
         self.upd_notes_card = RoundedCard(page, radius=16, padx=22, pady=16)
         self.upd_notes_title = tk.Label(self.upd_notes_card.body, text="", font=FONT_BOLD, fg=C.TEXT, bg=C.CARD)
         self.upd_notes_title.pack(anchor="w")
@@ -1099,7 +1178,7 @@ class App(tk.Tk):
             self.upd_notes.delete("1.0", "end")
             self.upd_notes.insert("1.0", self._plain_notes(release.notes))
             self.upd_notes.configure(state="disabled")
-            self.upd_notes_card.pack(fill="both", expand=True, pady=(14, 0))
+            self.upd_notes_card.pack(fill="x", pady=(14, 0), before=self.appupd_card)
         if state != "failed":
             self.upd_sub.configure(fg=C.TEXT_MUTED)
 
@@ -1280,6 +1359,10 @@ class App(tk.Tk):
                     self.vpn_page.handle(kind, payload)
                 elif kind.startswith("fw_"):
                     self.firewall_page.handle(kind, payload)
+                elif kind.startswith("appupd_"):
+                    self.appupd_card.handle(kind, payload)
+                elif kind.startswith("web_"):
+                    self.web_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":

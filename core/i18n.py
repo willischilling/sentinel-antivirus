@@ -98,4 +98,6 @@ def relative(moment: datetime) -> str:
         return t("today_at", time=clock)
     if days == 1:
         return t("yesterday_at", time=clock)
+    if days == -1:
+        return t("tomorrow_at", time=clock)
     return moment.strftime(t("date_format")) + " " + clock

@@ -15,7 +15,7 @@ import psutil
 import launcher
 import single_instance
 from core import (
-    activity, authenticode, database, elevate, i18n, paths, quarantine, scanner, settings, signatures,
+    activity, authenticode, database, elevate, i18n, paths, quarantine, scanner, schedule, settings, signatures,
     threat_intel,
 )
 from core.i18n import number, t
@@ -89,6 +89,7 @@ class Agent(tk.Tk):
         self.tray = self._start_tray()
         activity.log(t("log_started", folder=watch_path), "muted")
         threading.Thread(target=self._update_loop, daemon=True).start()
+        threading.Thread(target=self._schedule_loop, daemon=True).start()
         self.after(100, self._pump)
 
     def _sync_language(self):
@@ -115,6 +116,35 @@ class Agent(tk.Tk):
         if tray and i18n.current() != before:
             tray.icon.title = t("tray_title")
             tray.icon.update_menu()
+
+    def _schedule_loop(self):
+        """Runs the scheduled quick scan when it's due (checked every minute)."""
+        while True:
+            time.sleep(60)
+            try:
+                if schedule.is_due():
+                    schedule.mark_ran()
+                    self._scheduled_scan()
+            except Exception as e:  # never let a bad file or setting stop future scans
+                activity.log(t("log_sched_failed", error=e), "warn")
+
+    def _scheduled_scan(self):
+        _background_priority()  # stay out of the way of games and other apps
+        folders = schedule.quick_scan_folders()
+        activity.log(t("log_sched_started", folders=", ".join(f.name for f in folders)), "muted")
+        total = flagged = 0
+        for folder in folders:
+            for result in scanner.scan_directory(folder):
+                total += 1
+                if result.verdict in ("signature_match", "suspicious"):
+                    flagged += 1
+                    self.events.put(("file", result))  # the usual popup, with Quarantine / Delete
+        from datetime import datetime
+
+        settings.save(last_scan={"time": datetime.now().astimezone().isoformat(), "files": total,
+                                 "flagged": flagged, "path": "; ".join(str(f) for f in folders)})
+        activity.log(t("log_sched_done", files=number(total), flagged=number(flagged)),
+                     "threat" if flagged else "muted")
 
     def _update_loop(self):
         """Keeps malware fingerprints and YARA rules current while protecting."""
@@ -393,6 +423,18 @@ class Agent(tk.Tk):
             winsound.MessageBeep(winsound.MB_ICONHAND if is_threat else winsound.MB_ICONEXCLAMATION)
         except (ImportError, RuntimeError):
             pass
+
+
+def _background_priority():
+    """Lowers this thread's CPU and disk priority (Windows background mode)."""
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        kernel32.GetCurrentThread.restype = ctypes.c_void_p
+        kernel32.SetThreadPriority(ctypes.c_void_p(kernel32.GetCurrentThread()), 0x00010000)
+    except (AttributeError, OSError):
+        pass
 
 
 def main():
