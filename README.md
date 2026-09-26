@@ -65,6 +65,9 @@ Nothing is ended or deleted without a click.
 
 ## Getting started
 
+### Download
+Get **SentinelSetup.exe** from the [latest release](https://github.com/willischilling/sentinel-antivirus/releases/latest). The installer isn't code-signed, so Windows SmartScreen will warn you: click **More info → Run anyway**. The release notes include a SHA-256 checksum for verifying the download.
+
 ### Requirements
 - Windows 10 or 11. Scanning 7-Zip and RAR needs a recent Windows 11 `tar.exe`; everything else works on Windows 10.
 - Python 3.11 or newer. It was developed on Python 3.13.
