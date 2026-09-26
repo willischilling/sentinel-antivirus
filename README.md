@@ -55,10 +55,11 @@ Nothing is ended or deleted without a click.
 - Quarantine: files are moved to an isolated folder and renamed so they can't run, and can be restored or permanently deleted.
 - Detection history.
 - A system tray icon, and an option to start with Windows.
+- **Five languages:** English, 简体中文 (Chinese), हिन्दी (Hindi), Español and Français. Sentinel starts in your Windows display language when it's one of these. You can change it on the Settings page or in the installer, and the whole app switches instantly: popups, the tray menu, the activity log and the uninstaller too. Dates, times and numbers use each language's local format.
 - Opening Sentinel while it's already running brings up the existing window instead of starting a second copy.
 
 ### Installer
-`SentinelSetup.exe` installs for the current user only, so no admin rights are needed. It:
+`SentinelSetup.exe` installs for the current user only, so no admin rights are needed. It has a language picker, and it:
 - adds Start Menu and desktop shortcuts
 - adds an entry to Windows' Apps list with a working uninstaller
 - can start protection when you sign in (optional)
@@ -132,6 +133,7 @@ core/
 
 installer/  ── setup wizard, uninstaller, shortcut creation
 widgets.py, theme.py ── custom UI widgets (rounded cards, switches, rings) and colors
+core/i18n.py, core/translations.py ── the 5 languages (about 220 phrases each), plurals and local formats
 ```
 
 Design notes:

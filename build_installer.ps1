@@ -20,6 +20,7 @@ Write-Host "== Building Uninstall.exe ==" -ForegroundColor Cyan
 python -m PyInstaller --noconfirm --onefile --windowed --name Uninstall `
     --icon "$root\assets\icon.ico" `
     --paths "$root\installer" `
+    --paths "$root" `
     --distpath "$root\dist" --workpath "$root\build" --specpath "$root\build" `
     "$root\installer\uninstall.py"
 
@@ -29,6 +30,7 @@ Write-Host "== Building SentinelSetup.exe (installer wizard) ==" -ForegroundColo
 python -m PyInstaller --noconfirm --onefile --windowed --name SentinelSetup `
     --icon "$root\assets\icon.ico" `
     --paths "$root\installer" `
+    --paths "$root" `
     --add-data "$root\dist\Sentinel;payload/app" `
     --add-data "$root\dist\Uninstall.exe;payload" `
     --add-data "$root\dist\icon.ico;payload" `

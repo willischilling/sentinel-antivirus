@@ -25,20 +25,18 @@ from common import (
     UNINSTALL_EXE_NAME,
     VERSION,
     desktop_dir,
+    save_language,
+    saved_language,
 )
+from core import i18n
+from core.i18n import t
 from shortcut import create_shortcut
-
-BG = "#111317"
-CARD = "#1e222a"
-BORDER = "#2a2f3a"
-TEXT = "#e8eaed"
-TEXT_MUTED = "#8b93a3"
-ACCENT = "#5b8def"
-ACCENT_DARK = "#3a63b8"
+from theme import ACCENT, ACCENT_DARK, BG, BORDER, CARD, CARD_HOVER, TEXT, TEXT_MUTED
 
 FONT = ("Segoe UI", 10)
-FONT_BOLD = ("Segoe UI", 10, "bold")
-FONT_TITLE = ("Segoe UI", 16, "bold")
+FONT_BOLD = ("Segoe UI Semibold", 10)
+FONT_SMALL = ("Segoe UI", 9)
+FONT_TITLE = ("Segoe UI Semibold", 17)
 
 
 def payload_dir() -> Path:
@@ -55,28 +53,29 @@ def configure_style(root: tk.Tk):
     style.configure("TFrame", background=BG)
     style.configure("Card.TFrame", background=CARD)
     style.configure("TLabel", background=BG, foreground=TEXT, font=FONT)
-    style.configure("Muted.TLabel", background=BG, foreground=TEXT_MUTED, font=("Segoe UI", 9))
+    style.configure("Muted.TLabel", background=BG, foreground=TEXT_MUTED, font=FONT_SMALL)
     style.configure("Title.TLabel", background=BG, foreground=TEXT, font=FONT_TITLE)
     style.configure("Card.TCheckbutton", background=BG, foreground=TEXT, font=FONT)
     style.map("Card.TCheckbutton", background=[("active", BG)])
     style.configure(
-        "Accent.TButton", background=ACCENT, foreground="#0c0e12",
-        borderwidth=0, focuscolor=ACCENT, font=FONT_BOLD, padding=(16, 9),
+        "Accent.TButton", background=ACCENT, foreground="#ffffff", borderwidth=0,
+        lightcolor=ACCENT, darkcolor=ACCENT, focuscolor=ACCENT, font=FONT_BOLD, padding=(18, 9),
     )
-    style.map("Accent.TButton", background=[("active", ACCENT_DARK)])
+    style.map("Accent.TButton", background=[("disabled", BORDER), ("active", ACCENT_DARK)])
     style.configure(
-        "Ghost.TButton", background=CARD, foreground=TEXT, borderwidth=1,
-        bordercolor=BORDER, focuscolor=CARD, font=FONT, padding=(14, 8),
+        "Ghost.TButton", background=CARD, foreground=TEXT, borderwidth=1, bordercolor=BORDER,
+        lightcolor=CARD, darkcolor=CARD, focuscolor=CARD, font=FONT, padding=(16, 8),
     )
-    style.map("Ghost.TButton", background=[("active", BORDER)])
-    style.configure("Horizontal.TProgressbar", background=ACCENT, troughcolor=CARD, borderwidth=0)
+    style.map("Ghost.TButton", background=[("active", CARD_HOVER)])
+    style.configure("Horizontal.TProgressbar", background=ACCENT, troughcolor=CARD, borderwidth=0,
+                    lightcolor=ACCENT, darkcolor=ACCENT)
 
 
 class SetupWizard(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"{APP_NAME} Setup")
-        self.geometry("480x450")
+        i18n.set_language(saved_language())  # a reinstall keeps the language already chosen
+        self.geometry("500x500")
         self.resizable(False, False)
         self.configure(bg=BG)
         try:
@@ -97,46 +96,65 @@ class SetupWizard(tk.Tk):
         for child in self.container.winfo_children():
             child.destroy()
 
+    def _language_picker(self, parent):
+        row = tk.Frame(parent, bg=BG)
+        for code, native in i18n.LANGUAGES.items():
+            selected = code == i18n.current()
+            link = tk.Label(row, text=native, bg=ACCENT_DARK if selected else BG,
+                            fg=TEXT if selected else TEXT_MUTED, font=FONT_BOLD if selected else FONT,
+                            padx=8, pady=3, cursor="hand2")
+            link.pack(side="left", padx=(0, 4))
+            link.bind("<Button-1>", lambda e, c=code: self._set_language(c))
+        return row
+
+    def _set_language(self, code):
+        if code != i18n.current():
+            i18n.set_language(code)
+            self._build_welcome_page()  # checkbox choices are kept (same variables)
+
     def _build_welcome_page(self):
         self._clear()
+        self.title(t("setup_title"))
         ttk.Label(self.container, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
-        ttk.Label(self.container, text=f"Version {VERSION}", style="Muted.TLabel").pack(anchor="w", pady=(2, 20))
+        ttk.Label(self.container, text=t("setup_version", version=VERSION),
+                  style="Muted.TLabel").pack(anchor="w", pady=(2, 14))
+        self._language_picker(self.container).pack(anchor="w", pady=(0, 16))
 
         card = ttk.Frame(self.container, style="Card.TFrame", padding=16)
         card.pack(fill="x")
-        ttk.Label(card, text="This will install Sentinel Antivirus for your user account.",
-                  background=CARD, foreground=TEXT, font=FONT, wraplength=400, justify="left").pack(anchor="w")
-        ttk.Label(card, text=f"Install location:\n{INSTALL_DIR}", background=CARD,
-                  foreground=TEXT_MUTED, font=("Segoe UI", 9), justify="left").pack(anchor="w", pady=(10, 0))
+        tk.Label(card, text=t("setup_intro"), bg=CARD, fg=TEXT, font=FONT, wraplength=410,
+                 justify="left").pack(anchor="w")
+        tk.Label(card, text=t("setup_location", path=INSTALL_DIR), bg=CARD, fg=TEXT_MUTED,
+                 font=FONT_SMALL, justify="left", wraplength=410).pack(anchor="w", pady=(10, 0))
 
-        ttk.Checkbutton(self.container, text="Create a desktop shortcut", variable=self.desktop_shortcut_var,
-                         style="Card.TCheckbutton").pack(anchor="w", pady=(20, 4))
-        ttk.Checkbutton(self.container, text="Start Sentinel when Windows starts (recommended)",
-                         variable=self.autostart_var, style="Card.TCheckbutton").pack(anchor="w", pady=(0, 4))
-        ttk.Checkbutton(self.container, text="Launch Sentinel Antivirus after installing", variable=self.launch_after_var,
-                         style="Card.TCheckbutton").pack(anchor="w")
+        for text, var, pady in ((t("setup_desktop"), self.desktop_shortcut_var, (20, 4)),
+                                (t("setup_autostart"), self.autostart_var, (0, 4)),
+                                (t("setup_launch"), self.launch_after_var, (0, 0))):
+            ttk.Checkbutton(self.container, text=text, variable=var,
+                            style="Card.TCheckbutton").pack(anchor="w", pady=pady)
 
         self.status_label = ttk.Label(self.container, text="", style="Muted.TLabel")
-        self.status_label.pack(anchor="w", pady=(20, 6))
+        self.status_label.pack(anchor="w", pady=(16, 6))
         self.progress = ttk.Progressbar(self.container, mode="indeterminate")
 
         btn_row = ttk.Frame(self.container)
-        btn_row.pack(side="bottom", fill="x", pady=(20, 0))
-        ttk.Button(btn_row, text="Cancel", style="Ghost.TButton", command=self.destroy).pack(side="right")
-        self.install_btn = ttk.Button(btn_row, text="Install", style="Accent.TButton", command=self._run_install)
+        btn_row.pack(side="bottom", fill="x", pady=(16, 0))
+        ttk.Button(btn_row, text=t("setup_cancel"), style="Ghost.TButton", command=self.destroy).pack(side="right")
+        self.install_btn = ttk.Button(btn_row, text=t("setup_install"), style="Accent.TButton",
+                                      command=self._run_install)
         self.install_btn.pack(side="right", padx=(0, 8))
 
     def _run_install(self):
         self.install_btn.configure(state="disabled")
         self.progress.pack(fill="x", pady=(0, 8))
         self.progress.start(12)
-        self.status_label.configure(text="Installing...")
+        self.status_label.configure(text=t("setup_installing"))
         self.update_idletasks()
         try:
             self._do_install()
         except Exception as e:
             self.progress.stop()
-            messagebox.showerror(f"{APP_NAME} Setup", f"Installation failed:\n{e}")
+            messagebox.showerror(t("setup_title"), t("setup_failed", error=e))
             self.install_btn.configure(state="normal")
             return
         self.progress.stop()
@@ -150,13 +168,7 @@ class SetupWizard(tk.Tk):
         src = payload_dir()
         app_src = src / "app"
         if not (app_src / APP_EXE_NAME).is_file() or not (src / UNINSTALL_EXE_NAME).is_file():
-            if not getattr(sys, "frozen", False):
-                raise RuntimeError(
-                    "This is the installer's source code, not the installer itself, so it has no "
-                    "app files to install.\n\nRun SentinelSetup.exe instead (it's in the main folder "
-                    "of the download), or build it first with build_installer.ps1.")
-            raise RuntimeError("This installer is incomplete or damaged (the app files are missing). "
-                               "Please download it again.")
+            raise RuntimeError(t("setup_err_damaged" if getattr(sys, "frozen", False) else "setup_err_source"))
 
         # An upgrade can't overwrite files the running app has open. This ends
         # both the window and the background agent (same exe).
@@ -166,7 +178,7 @@ class SetupWizard(tk.Tk):
         icon = INSTALL_DIR / ICON_NAME
         uninstall_exe = INSTALL_DIR / UNINSTALL_EXE_NAME
         try:
-            self._status("Copying files...")
+            self._status(t("setup_copying"))
             INSTALL_DIR.mkdir(parents=True, exist_ok=True)
             self._copy_with_retry(lambda: shutil.copytree(app_src, INSTALL_DIR / APP_SUBDIR, dirs_exist_ok=True))
             for name in (UNINSTALL_EXE_NAME, ICON_NAME):
@@ -174,13 +186,13 @@ class SetupWizard(tk.Tk):
                     self._copy_with_retry(lambda n=name: shutil.copy2(src / n, INSTALL_DIR / n))
             # Nothing may point at the app until it's verifiably in place.
             if not app_exe.is_file() or not uninstall_exe.is_file():
-                raise RuntimeError("Sentinel's files didn't finish copying. Another security program may "
-                                   "have blocked them.")
+                raise RuntimeError(t("setup_err_copy"))
 
-            self._status("Registering with Windows...")
+            self._status(t("setup_registering"))
             self._write_uninstall_registry(app_exe, icon, uninstall_exe)
+            save_language(i18n.current())
 
-            self._status("Creating shortcuts...")
+            self._status(t("setup_shortcuts"))
             app_dir = INSTALL_DIR / APP_SUBDIR
             create_shortcut(START_MENU_DIR / f"{APP_NAME}.lnk", app_exe, app_dir, icon,
                             description="Signature + heuristic antivirus scanner")
@@ -252,22 +264,19 @@ class SetupWizard(tk.Tk):
 
     def _build_finish_page(self):
         self._clear()
-        ttk.Label(self.container, text="Installation Complete", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(
-            self.container,
-            text=f"{APP_NAME} has been installed.\nYou can find it in the Start Menu.",
-            style="Muted.TLabel", justify="left",
-        ).pack(anchor="w", pady=(10, 0))
+        ttk.Label(self.container, text=t("setup_complete"), style="Title.TLabel").pack(anchor="w")
+        tk.Label(self.container, text=t("setup_complete_msg"), bg=BG, fg=TEXT_MUTED, font=FONT,
+                 justify="left", wraplength=430).pack(anchor="w", pady=(10, 0))
 
         btn_row = ttk.Frame(self.container)
         btn_row.pack(side="bottom", fill="x", pady=(20, 0))
-        ttk.Button(btn_row, text="Finish", style="Accent.TButton", command=self._finish).pack(side="right")
+        ttk.Button(btn_row, text=t("setup_finish"), style="Accent.TButton", command=self._finish).pack(side="right")
 
     def _finish(self):
         if self.launch_after_var.get():
-            app_exe = INSTALL_DIR / APP_EXE_NAME
+            app_exe = INSTALL_DIR / APP_SUBDIR / APP_EXE_NAME
             if app_exe.exists():
-                subprocess.Popen([str(app_exe)], cwd=str(INSTALL_DIR))
+                subprocess.Popen([str(app_exe)], cwd=str(app_exe.parent))
         self.destroy()
 
 

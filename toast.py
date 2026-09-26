@@ -3,6 +3,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk
 
+from core.i18n import t
 from theme import BAD, BORDER, CARD, FONT_BOLD, FONT_SMALL, TEXT, TEXT_MUTED
 
 WIDTH = 360
@@ -80,7 +81,7 @@ class Toast(tk.Toplevel):
         except Exception as e:
             if self.on_error:
                 self.on_error(label, e)
-            self._show_status(f"{label} failed: {e}", BAD, close_after_ms=8000)
+            self._show_status(t("toast_failed", action=label, error=e), BAD, close_after_ms=8000)
             return
         if message is None:
             self.dismiss()

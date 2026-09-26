@@ -1,10 +1,18 @@
 """Shared constants for the installer and uninstaller."""
+import json
 import os
+import sys
 from pathlib import Path
 
+if not getattr(sys, "frozen", False):
+    # Running from source: make the project root importable (core.i18n, theme).
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core import version  # noqa: E402  (after the path setup above)
+
+VERSION = version.VERSION
 APP_NAME = "Sentinel Antivirus"
 PUBLISHER = "Sentinel"
-VERSION = "1.0.1"
 
 INSTALL_DIR = Path(os.environ["LOCALAPPDATA"]) / APP_NAME
 APP_SUBDIR = "app"  # the --onedir build's folder, so its DLLs don't clutter INSTALL_DIR
@@ -47,3 +55,26 @@ LEGACY_DESKTOP_DIR = Path.home() / "Desktop"
 # Must match core/autostart.py in the app.
 REG_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 REG_RUN_VALUE = "SentinelAntivirus"
+
+# The app's settings file (see core/paths.py and core/settings.py).
+SETTINGS_PATH = INSTALL_DIR / "data" / "settings.json"
+
+
+def saved_language() -> str | None:
+    try:
+        return json.loads(SETTINGS_PATH.read_text(encoding="utf-8")).get("language")
+    except (OSError, ValueError):
+        return None
+
+
+def save_language(code: str):
+    """Merges the chosen language into the app's settings, keeping everything else."""
+    try:
+        data = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data["language"] = code
+    SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = SETTINGS_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    tmp.replace(SETTINGS_PATH)

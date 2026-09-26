@@ -79,10 +79,10 @@ class _UpdateLock:
 
 
 def _install_full_hashes(progress):
-    progress("Downloading malware fingerprint database (about 45 MB)...")
+    progress("intel_downloading_full")
     archive = zipfile.ZipFile(io.BytesIO(_download(MB_FULL_URL, timeout=600)))
     name = next(n for n in archive.namelist() if n.endswith(".txt"))
-    progress("Installing malware fingerprints...")
+    progress("intel_installing_full")
     with archive.open(name) as raw:
         lines = io.TextIOWrapper(raw, encoding="utf-8", errors="replace")
         database.add_feed_hashes(
@@ -92,7 +92,7 @@ def _install_full_hashes(progress):
 
 
 def _install_recent_hashes(progress):
-    progress("Downloading newest malware fingerprints...")
+    progress("intel_downloading_recent")
     text = _download(MB_RECENT_URL).decode("utf-8", errors="replace")
     rows = csv.reader((line for line in text.splitlines() if line and not line.startswith("#")),
                       skipinitialspace=True)
@@ -107,11 +107,11 @@ def _install_recent_hashes(progress):
 def _install_yara_rules(progress):
     if yara_engine.yara is None:
         return
-    progress("Downloading YARA rules...")
+    progress("intel_downloading_yara")
     archive = zipfile.ZipFile(io.BytesIO(_download(YARA_CORE_URL)))
     name = next(n for n in archive.namelist() if n.endswith(".yar"))
     source = archive.read(name).decode("utf-8", errors="replace")
-    progress("Compiling YARA rules...")
+    progress("intel_compiling_yara")
     compiled = yara_engine.yara.compile(source=source)
     yara_engine.RULES_DIR.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=yara_engine.RULES_DIR, suffix=".tmp")
@@ -120,8 +120,9 @@ def _install_yara_rules(progress):
     os.replace(tmp, yara_engine.COMPILED_PATH)  # atomic: scanners never see a half-written file
 
 
-def update(progress=lambda message: None) -> dict:
-    """Runs a full update. Raises on network failure; partial progress is kept."""
+def update(progress=lambda key: None) -> dict:
+    """Runs a full update. Raises on network failure; partial progress is kept.
+    progress() receives translation keys (see core/translations.py)."""
     with _UpdateLock():
         started = time.monotonic()
         if not database.get_meta("intel_full_installed"):

@@ -30,6 +30,9 @@ ICONS = {
     "refresh": "",
     "restore": "",
     "delete": "",
+    "settings": "",
+    "globe": "",
+    "info": "",
 }
 _icon_family = None
 

@@ -8,7 +8,9 @@ from PIL import Image
 
 class Tray:
     def __init__(self, icon_path, title, items):
-        """items: (label, zero-arg callback, is_default) tuples."""
+        """items: (label, zero-arg callback, is_default) tuples. A label can be a
+        callable taking the menu item, so it's re-read each time the menu opens
+        (used for language changes)."""
         menu = pystray.Menu(*[
             pystray.MenuItem(label, callback, default=is_default)
             for label, callback, is_default in items

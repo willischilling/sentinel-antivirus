@@ -18,8 +18,10 @@ from tkinter import messagebox
 
 from common import (
     APP_EXE_NAME, APP_NAME, INSTALL_DIR, LEGACY_DESKTOP_DIR, REG_RUN_KEY, REG_RUN_VALUE,
-    REG_UNINSTALL_KEY, START_MENU_DIR, desktop_dir,
+    REG_UNINSTALL_KEY, START_MENU_DIR, desktop_dir, saved_language,
 )
+from core import i18n
+from core.i18n import t
 
 LOG_PATH = Path(tempfile.gettempdir()) / "Sentinel-uninstall.log"
 CREATE_NO_WINDOW = 0x08000000
@@ -103,16 +105,12 @@ def schedule_folder_removal():
 
 def main():
     os.chdir(tempfile.gettempdir())  # never hold the install folder open ourselves
+    i18n.set_language(saved_language())  # read before the settings file is deleted
     root = tk.Tk()
     root.withdraw()
     root.attributes("-topmost", True)  # keep the dialog in front of other windows
 
-    confirm = messagebox.askyesno(
-        f"{APP_NAME} Uninstall",
-        f"Uninstall {APP_NAME}?\n\n"
-        "This will remove the application, its scan history, and any quarantined files.",
-        parent=root,
-    )
+    confirm = messagebox.askyesno(t("uninstall_title"), t("uninstall_confirm"), parent=root)
     if not confirm:
         log("cancelled by user")
         sys.exit(0)
@@ -126,13 +124,9 @@ def main():
         step("schedule install folder removal", schedule_folder_removal),
     ]
     if all(results):
-        messagebox.showinfo(f"{APP_NAME} Uninstall", f"{APP_NAME} has been uninstalled.", parent=root)
+        messagebox.showinfo(t("uninstall_title"), t("uninstall_done"), parent=root)
     else:
-        messagebox.showwarning(
-            f"{APP_NAME} Uninstall",
-            f"{APP_NAME} was mostly removed, but some steps failed.\nDetails: {LOG_PATH}",
-            parent=root,
-        )
+        messagebox.showwarning(t("uninstall_title"), t("uninstall_partial", log=LOG_PATH), parent=root)
     sys.exit(0)
 
 
