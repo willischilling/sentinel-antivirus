@@ -297,6 +297,10 @@ footer p { margin: 0; max-width: 70ch; }
 .fw-app .nm { font-weight: 600; font-size: 14.5px; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .fw-app .pt { font: 11.5px "IBM Plex Mono", monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fw-app .tagb { font: 600 10px "IBM Plex Mono", monospace; background: var(--bad); color: #0b1120; padding: 2px 6px; border-radius: 4px; }
+.fw-app .tagb.upd { background: var(--warn); }
+.fw-app .acts { display: flex; gap: 6px; }
+.fw-app .nm { flex-wrap: wrap; row-gap: 3px; }
+@media (max-width: 480px) { .fw-app .acts { flex-direction: column; } .fw-app button { padding: 6px 9px; } }
 .fw-app button { border-radius: 7px; padding: 7px 12px; font: 600 12.5px "IBM Plex Sans", sans-serif; cursor: pointer; background: transparent; border: 1px solid var(--line); color: var(--bad); }
 .fw-app button.un { color: var(--text); }
 
@@ -481,6 +485,7 @@ footer p { margin: 0; max-width: 70ch; }
       <ul class="ask-points">
         <li><b>Standard or Lockdown</b><span>Standard blocks incoming connections. Lockdown cuts every connection in and out with one click, for when you think something's wrong.</span></li>
         <li><b>Block any app</b><span>Every app on your PC is listed with its icon and a Block button, blocked ones on top. Search it, or Browse for anything else. Unblock any time.</span></li>
+        <li><b>Blocks the real app, not just the shortcut</b><span>Apps like Discord start through a small launcher and run the real program from a version folder. Sentinel blocks both, offers to close the app so connections it already has are cut, and flags it with <span class="mono">UPDATED</span> if an update moves it somewhere new.</span></li>
         <li><b>Nothing hidden</b><span>Every rule Sentinel adds is labeled "Sentinel Antivirus" in Windows' own firewall settings, and uninstalling removes them all.</span></li>
       </ul>
     </div>
@@ -864,7 +869,7 @@ document.querySelectorAll("[data-fw]").forEach(b => b.addEventListener("click", 
 // ---- Firewall app list demo (example apps; the real one lists what's installed) ----
 const fwApps = [
   ["Brave", "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe", "#fb542b"],
-  ["Discord", "C:\\Users\\you\\AppData\\Local\\Discord\\Discord.exe", "#5865f2"],
+  ["Discord", "C:\\Users\\you\\AppData\\Local\\Discord\\Discord.exe", "#5865f2", true, true],
   ["Free VPN Pro", "C:\\Users\\you\\Downloads\\FreeVPNPro\\freevpn.exe", "#e11d48", true],
   ["Google Chrome", "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "#1a73e8"],
   ["OBS Studio", "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe", "#302e31"],
@@ -874,7 +879,7 @@ const fwApps = [
   ["VLC media player", "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe", "#f08000"],
   ["WinRAR", "C:\\Program Files\\WinRAR\\WinRAR.exe", "#7b3f9e"],
   ["Zoom", "C:\\Users\\you\\AppData\\Roaming\\Zoom\\bin\\Zoom.exe", "#2d8cff"],
-].map(([name, path, color, blocked]) => ({ name, path, color, blocked: !!blocked }));
+].map(([name, path, color, blocked, updated]) => ({ name, path, color, blocked: !!blocked, updated: !!updated }));
 const fwList = document.getElementById("fw-list"), fwQ = document.getElementById("fw-q");
 function drawApps() {
   const q = fwQ.value.trim().toLowerCase();
@@ -890,10 +895,18 @@ function drawApps() {
     const txt = el("div"); txt.style.minWidth = "0";
     const nm = el("div", "nm"); nm.appendChild(el("span", null, a.name));
     if (a.blocked) nm.appendChild(el("span", "tagb", "BLOCKED"));
+    if (a.blocked && a.updated) nm.appendChild(el("span", "tagb upd", "UPDATED"));
     txt.append(nm, el("div", "pt", a.path));
     const btn = el("button", a.blocked ? "un" : "", a.blocked ? "Unblock" : "Block");
-    btn.addEventListener("click", () => { a.blocked = !a.blocked; drawApps(); });
-    row.append(ic, txt, btn);
+    btn.addEventListener("click", () => { a.blocked = !a.blocked; a.updated = false; drawApps(); });
+    const actions = el("div", "acts");
+    if (a.blocked && a.updated) {
+      const again = el("button", "", "Block again");
+      again.addEventListener("click", () => { a.updated = false; drawApps(); });
+      actions.appendChild(again);
+    }
+    actions.appendChild(btn);
+    row.append(ic, txt, actions);
     fwList.appendChild(row);
   });
 }
