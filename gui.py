@@ -1012,12 +1012,12 @@ class App(tk.Tk):
     def _poll_agent(self):
         """Keeps the status and live activity in sync with the background agent,
         including changes made from the tray menu."""
+        self.after(500, self._poll_agent)  # first, so an error here can't stop the polling
         if not self._transitioning:
             running = launcher.agent_running()
             if running != self.protection_on:
                 self._set_protection_indicator(running)
         self._append_activity(self.activity_tail.read_new())
-        self.after(500, self._poll_agent)
 
     def _set_protection_indicator(self, on: bool):
         self.protection_on = on
@@ -1507,7 +1507,14 @@ class App(tk.Tk):
                 processed += 1
         except queue.Empty:
             pass
+        except Exception:  # log it, but keep the window updating
+            self.report_callback_exception(*sys.exc_info())
         self.after(50, self._pump_queue)
+
+    def report_callback_exception(self, exc_type, exc, tb):
+        from core import crashlog
+
+        crashlog.write("window callback", exc_type, exc, tb)
 
     def _show_window(self):
         self.deiconify()
@@ -1526,11 +1533,15 @@ def main():
         from core import assistant as ai
 
         sys.exit(0 if ai.engine_available() else 1)
+    from core import crashlog
+
     if "--agent" in sys.argv:
         import agent
 
+        crashlog.install("agent")
         agent.main()
         return
+    crashlog.install("window")
     if not single_instance.UI.acquire():
         single_instance.UI.signal()  # bring the open window to the front instead
         return

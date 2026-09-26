@@ -1,5 +1,6 @@
 """Real-time process monitoring: check running programs' files against the
 fingerprint database and YARA rules."""
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -91,10 +92,15 @@ def monitor_loop(interval_seconds: float, on_alert, stop_flag: list[bool],
             next_sweep = now + full_sweep_seconds
         batch = [sweep.popleft() for _ in range(min(sweep_batch, len(sweep)))]
         already_alerted &= current  # forget processes that have exited
-        for alert in scan_running_processes(list(new) + [p for p in batch if p not in new]):
-            if alert.pid not in already_alerted:
-                already_alerted.add(alert.pid)
-                on_alert(alert)
+        try:
+            for alert in scan_running_processes(list(new) + [p for p in batch if p not in new]):
+                if alert.pid not in already_alerted:
+                    already_alerted.add(alert.pid)
+                    on_alert(alert)
+        except Exception:  # e.g. the database busy for a moment: log it, keep watching
+            from core import crashlog
+
+            crashlog.write("process watcher", *sys.exc_info())
         time.sleep(interval_seconds)
 
 

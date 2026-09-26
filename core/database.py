@@ -44,11 +44,30 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 
+_wal = False
+
+
+def _use_wal(conn):
+    """Write-ahead logging, so reads never wait for a write. Without it, the first threat
+    database download (over a million rows in one transaction) locked the window out of the
+    database long enough to freeze it and, on slower PCs, crash it with "database is locked".
+    The mode is stored in the file; switching needs a moment with no other writer, so a busy
+    database just tries again on the next connection."""
+    global _wal
+    if _wal:
+        return
+    try:
+        _wal = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0].lower() == "wal"
+    except sqlite3.OperationalError:
+        pass
+
+
 @contextmanager
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     # The agent and the window share this file; wait rather than fail on a lock.
     conn = sqlite3.connect(DB_PATH, timeout=30)
+    _use_wal(conn)
     try:
         yield conn
         conn.commit()
