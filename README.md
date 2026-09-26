@@ -1,5 +1,15 @@
 # Sentinel Antivirus
 
+<p align="center">
+  <a href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe"><img src="https://img.shields.io/badge/Download-SentinelSetup.exe-2ea44f?style=for-the-badge&logo=windows&logoColor=white" alt="Download SentinelSetup.exe"></a>
+</p>
+
+<p align="center">
+  <b>Windows 10 / 11, 64-bit.</b> Click the button, run <code>SentinelSetup.exe</code>, done.<br>
+  Don't use the green <b>Code → Download ZIP</b> button. That's the source code, not the app.<br>
+  Windows SmartScreen will warn because the installer isn't code-signed: click <b>More info → Run anyway</b>.
+</p>
+
 A Windows antivirus built from scratch in Python: an on-demand scanner, real-time protection that keeps running in the background, behavior monitoring, and a desktop app with its own installer.
 
 Sentinel checks files against over a million real malware fingerprints and about 10,700 YARA rules, looks inside archives, verifies publisher signatures, and watches for programs adding themselves to startup and for ransomware-like activity.
