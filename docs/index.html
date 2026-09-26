@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel Antivirus</title>
+<meta name="description" content="A Windows antivirus built from scratch in Python: 1.15 million malware fingerprints, 10,700 YARA rules, archive scanning and real-time protection that keeps running in the background.">
+<link rel="icon" href="assets/emblem.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,500;100,700;125,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120;
+  --panel: #0f172a;
+  --card: #151f33;
+  --line: #24324d;
+  --text: #e7ecf5;
+  --muted: #8b97ad;
+  --accent: #3b82f6;
+  --accent-strong: #2563eb;
+  --good: #22c55e;
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --grid: rgba(139, 151, 173, .07);
+  --shot-shadow: 0 30px 80px -30px rgba(0, 0, 0, .8);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f7fb; --panel: #e9edf5; --card: #ffffff; --line: #dfe4ee; --text: #0f172a; --muted: #5b6477;
+    --accent: #2563eb; --accent-strong: #1d4ed8; --good: #16a34a; --warn: #d97706; --bad: #dc2626;
+    --grid: rgba(15, 23, 42, .05); --shot-shadow: 0 30px 70px -35px rgba(15, 23, 42, .45);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f7fb; --panel: #e9edf5; --card: #ffffff; --line: #dfe4ee; --text: #0f172a; --muted: #5b6477;
+  --accent: #2563eb; --accent-strong: #1d4ed8; --good: #16a34a; --warn: #d97706; --bad: #dc2626;
+  --grid: rgba(15, 23, 42, .05); --shot-shadow: 0 30px 70px -35px rgba(15, 23, 42, .45);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.6 "IBM Plex Sans", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+img { max-width: 100%; display: block; }
+.wrap { width: min(1120px, 100% - 32px); margin-inline: auto; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+h1, h2, h3 { font-family: "Archivo", sans-serif; font-weight: 800; font-stretch: 125%; line-height: 1.02; margin: 0; letter-spacing: -.01em; }
+h2 { font-size: clamp(30px, 4.4vw, 48px); }
+h3 { font-size: 19px; font-stretch: 100%; font-weight: 700; letter-spacing: 0; }
+.kicker { font: 500 12px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 18px; display: flex; gap: 10px; align-items: center; }
+.kicker b { color: var(--accent); font-weight: 500; }
+.lede { color: var(--muted); font-size: 18px; max-width: 58ch; }
+section { padding: 110px 0; border-top: 1px solid var(--line); }
+
+/* nav */
+header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.nav { display: flex; align-items: center; gap: 28px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 11px; text-decoration: none; margin-right: auto; }
+.brand img { width: 30px; height: 30px; background: #151f33; border-radius: 7px; padding: 3px; }
+.brand span { font: 700 15px/1 "Archivo", sans-serif; font-stretch: 125%; letter-spacing: .16em; }
+.nav a.link { text-decoration: none; color: var(--muted); font-size: 14px; }
+.nav a.link:hover { color: var(--text); }
+.btn { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-strong); }
+.btn.ghost { border-color: var(--line); color: var(--text); background: transparent; }
+.btn.ghost:hover { background: var(--card); }
+.btn.small { padding: 8px 14px; font-size: 14px; }
+.contact { position: relative; }
+.contact-pop { position: absolute; right: 0; top: calc(100% + 10px); width: 300px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; box-shadow: var(--shot-shadow); display: none; }
+.contact-pop.open { display: block; }
+.contact-pop .label { font: 500 11px "IBM Plex Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.contact-pop .email { font: 500 14px "IBM Plex Mono", monospace; margin: 8px 0 14px; word-break: break-all; }
+.contact-pop .row { display: flex; gap: 8px; }
+.contact-pop .row .btn { flex: 1; justify-content: center; }
+.btn svg { width: 17px; height: 17px; }
+
+/* hero */
+.hero { padding: 84px 0 100px; position: relative; overflow: hidden; }
+.hero::before { content: ""; position: absolute; inset: 0; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 44px 44px; mask-image: linear-gradient(to bottom, #000 30%, transparent); pointer-events: none; }
+.hero .wrap { position: relative; display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; }
+.hero h1 { font-size: clamp(44px, 6.6vw, 80px); }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lede { margin: 26px 0 34px; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.release-meta { margin-top: 18px; font-size: 13px; color: var(--muted); }
+.release-meta a { color: var(--muted); }
+
+/* live feed */
+.feed { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shot-shadow); position: relative; }
+.feed-top { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent); animation: pulse 2s infinite; }
+@keyframes pulse { 70% { box-shadow: 0 0 0 9px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.feed-top .mono { margin-left: auto; font-size: 12px; }
+.log { font: 13px/1.75 "IBM Plex Mono", monospace; padding: 16px 18px 20px; height: 300px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+.log div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: in .35s ease-out; }
+.log time { color: var(--muted); margin-right: 14px; }
+.log .warn { color: var(--warn); } .log .threat { color: var(--bad); } .log .ok { color: var(--good); }
+@keyframes in { from { opacity: 0; transform: translateY(6px); } }
+
+/* toast (recreation of the app's popup) */
+.toast { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 10px; padding: 16px 18px; width: 330px; max-width: 100%; }
+.toast .t-title { font-weight: 600; font-size: 14px; color: var(--bad); display: flex; justify-content: space-between; }
+.toast .t-title span:last-child { color: var(--muted); font-weight: 400; }
+.toast .t-file { font-weight: 600; margin: 8px 0 2px; }
+.toast .t-detail { color: var(--muted); font-size: 13px; }
+.toast .t-actions { display: flex; gap: 8px; margin-top: 14px; }
+.toast .t-actions span { flex: 1; text-align: center; padding: 8px 0; border-radius: 6px; font-size: 13px; font-weight: 600; border: 1px solid var(--line); }
+.toast .t-actions .q { background: var(--accent); color: #fff; border-color: var(--accent); }
+.toast .t-actions .d { color: var(--bad); }
+.toast.warn { border-left-color: var(--warn); } .toast.warn .t-title { color: var(--warn); }
+.feed .toast { position: absolute; right: 16px; bottom: 16px; box-shadow: 0 18px 40px -12px rgba(0,0,0,.55); transform: translateY(calc(100% + 30px)); transition: transform .5s cubic-bezier(.2,.8,.2,1); }
+.feed .toast.show { transform: none; }
+
+/* pipeline */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: end; margin-bottom: 56px; }
+.samples { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
+.sample { font: 500 13px "IBM Plex Mono", monospace; padding: 9px 14px; border-radius: 7px; border: 1px solid var(--line); background: transparent; color: var(--muted); cursor: pointer; }
+.sample:hover { color: var(--text); }
+.sample[aria-pressed="true"] { background: var(--card); color: var(--text); border-color: var(--accent); }
+.stages { display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+.stage { padding: 22px 20px 24px; border-right: 1px solid var(--line); position: relative; transition: background .3s, opacity .3s; min-height: 210px; }
+.stage:last-child { border-right: 0; }
+.stage .n { font: 500 12px "IBM Plex Mono", monospace; color: var(--muted); }
+.stage h3 { margin: 10px 0 6px; }
+.stage p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.stage .res { margin-top: 16px; font: 500 12.5px/1.45 "IBM Plex Mono", monospace; min-height: 38px; opacity: 0; transition: opacity .3s; }
+.stage.active { background: var(--card); }
+.stage.active::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--accent); }
+.stage.done .res, .stage.hit .res { opacity: 1; }
+.stage.done .res { color: var(--good); }
+.stage.hit { background: color-mix(in srgb, var(--bad) 9%, var(--card)); }
+.stage.hit::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--bad); }
+.stage.hit.sus { background: color-mix(in srgb, var(--warn) 9%, var(--card)); }
+.stage.hit.sus::before { background: var(--warn); }
+.stage.hit .res { color: var(--bad); } .stage.hit.sus .res { color: var(--warn); }
+.stage.skipped { opacity: .38; }
+.verdict { margin-top: 18px; display: flex; align-items: center; gap: 14px; font-size: 15px; min-height: 28px; }
+.verdict .tag { font: 600 12px "IBM Plex Mono", monospace; padding: 5px 10px; border-radius: 5px; letter-spacing: .04em; }
+.tag.clean { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.tag.threat { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
+.tag.sus { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.verdict .why { color: var(--muted); }
+
+/* app */
+.app-head { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 44px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; padding: 3px; background: var(--panel); }
+.seg button { font: 500 14px "IBM Plex Sans", sans-serif; border: 0; background: transparent; color: var(--muted); padding: 7px 16px; border-radius: 6px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card); color: var(--text); box-shadow: 0 1px 0 var(--line); }
+.shot { border-radius: 12px; overflow: hidden; box-shadow: var(--shot-shadow); border: 1px solid var(--line); max-width: 980px; margin-inline: auto; position: relative; aspect-ratio: 980 / 671; background: var(--panel); }
+.shot img { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .4s; }
+.shot img.hidden { opacity: 0; }
+.notes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; margin-top: 56px; max-width: 980px; margin-inline: auto; }
+.notes p { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
+
+/* protection */
+.layers { border-top: 1px solid var(--line); }
+.layer { display: grid; grid-template-columns: 70px 1fr 360px; gap: 30px; padding: 36px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.layer .n { font: 500 13px "IBM Plex Mono", monospace; color: var(--muted); padding-top: 4px; }
+.layer h3 { font-size: 24px; font-stretch: 112%; }
+.layer p { color: var(--muted); margin: 10px 0 0; max-width: 52ch; }
+.layer .toast { justify-self: end; }
+
+/* languages */
+.langs { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 22px 32px; margin-top: 44px; }
+.langs div { font-family: "Archivo", "Noto Sans SC", "Noto Sans Devanagari", sans-serif; font-weight: 700; font-size: clamp(22px, 2.3vw, 30px); }
+.langs small { display: block; font: 500 12px "IBM Plex Mono", monospace; color: var(--muted); letter-spacing: .08em; margin-top: 4px; }
+
+/* limits */
+.limits { display: grid; grid-template-columns: 1fr 1fr; gap: 0 56px; margin-top: 48px; }
+.limit { padding: 24px 0; border-top: 1px solid var(--line); }
+.limit h3 { display: flex; gap: 12px; }
+.limit h3::before { content: "—"; color: var(--warn); font-weight: 400; }
+.limit p { margin: 8px 0 0 30px; color: var(--muted); font-size: 15px; }
+
+/* install */
+.install { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start; }
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+.steps li { counter-increment: s; display: grid; grid-template-columns: 44px 1fr; padding: 18px 0; border-top: 1px solid var(--line); }
+.steps li::before { content: counter(s, decimal-leading-zero); font: 500 13px "IBM Plex Mono", monospace; color: var(--accent); padding-top: 3px; }
+.steps b { display: block; }
+.steps span { color: var(--muted); font-size: 15px; }
+pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; overflow-x: auto; font: 13.5px/1.7 "IBM Plex Mono", monospace; margin: 0; }
+pre .c { color: var(--muted); }
+
+footer { border-top: 1px solid var(--line); padding: 40px 0 60px; color: var(--muted); font-size: 14px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 30px; flex-wrap: wrap; }
+footer p { margin: 0; max-width: 70ch; }
+
+.hero .wrap > *, .split > *, .install > *, .layer > * { min-width: 0; }
+
+@media (max-width: 960px) {
+  .hero .wrap, .split, .install { grid-template-columns: 1fr; }
+  .hero { padding-top: 56px; }
+  .stages { grid-template-columns: 1fr; }
+  .stage { border-right: 0; border-bottom: 1px solid var(--line); min-height: 0; }
+  .stage:last-child { border-bottom: 0; }
+  .notes, .limits { grid-template-columns: 1fr; gap: 28px; }
+  .layer { grid-template-columns: 1fr; gap: 14px; }
+  .layer .toast { justify-self: start; }
+  .nav a.link { display: none; }
+  .nav { gap: 10px; }
+  .contact { position: static; }
+  .contact-pop { position: fixed; top: 72px; left: 16px; right: 16px; width: auto; }
+  section { padding: 80px 0; }
+}
+@media (max-width: 480px) {
+  .log { font-size: 11.5px; height: 260px; }
+  .feed .toast { left: 12px; right: 12px; width: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <nav class="wrap nav">
+    <a class="brand" href="#"><img src="assets/emblem.png" alt=""><span>SENTINEL</span></a>
+    <a class="link" href="#detection">Detection</a>
+    <a class="link" href="#protection">Protection</a>
+    <a class="link" href="#limits">Limits</a>
+    <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
+    <div class="contact">
+      <button class="btn ghost small" id="contact-btn" aria-expanded="false" aria-controls="contact-pop">Contact</button>
+      <div class="contact-pop" id="contact-pop" role="dialog" aria-label="Contact">
+        <div class="label">Questions, bugs, ideas</div>
+        <div class="email" id="contact-email"></div>
+        <div class="row">
+          <button class="btn ghost small" id="contact-copy">Copy</button>
+          <a class="btn primary small" id="contact-mail" href="#">Email</a>
+        </div>
+      </div>
+    </div>
+    <a class="btn primary small" href="#install">Download</a>
+  </nav>
+</header>
+
+<main>
+<section class="hero" style="border-top:0">
+  <div class="wrap">
+    <div>
+      <div class="kicker"><b>●</b> Windows 10 &amp; 11 · free · open source</div>
+      <h1>An antivirus,<br>built from <em>scratch.</em></h1>
+      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window.</p>
+      <div class="cta">
+        <a class="btn primary" id="dl" href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn ghost" href="https://github.com/willischilling/sentinel-antivirus">View the source</a>
+      </div>
+      <div class="release-meta mono" id="release-meta">Latest release · 42 MB · <a href="https://github.com/willischilling/sentinel-antivirus/releases">all releases</a></div>
+    </div>
+
+    <div class="feed" aria-label="Example of Sentinel's live activity log">
+      <div class="feed-top"><span class="pulse"></span> Live activity <span class="mono">agent · pid 8412</span></div>
+      <div class="log" id="log"></div>
+      <div class="toast" id="toast">
+        <div class="t-title"><span>Virus detected</span><span>✕</span></div>
+        <div class="t-file mono">free_robux_generator.exe</div>
+        <div class="t-detail">Matches known threat: AsyncRAT (ThreatFox)</div>
+        <div class="t-actions"><span class="q">Quarantine</span><span class="d">Delete</span><span>Ignore</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="detection">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <div class="kicker"><b>01</b> Detection</div>
+        <h2>Follow a file through the scanner.</h2>
+      </div>
+      <p class="lede">Every file goes through the same layers, strongest first. The first hard match stops the line. Weak signals get one last check: a valid publisher signature, verified by Windows itself, clears them.</p>
+    </div>
+
+    <div class="samples" role="group" aria-label="Pick a file">
+      <button class="sample" data-i="0" aria-pressed="true">free_robux_generator.exe</button>
+      <button class="sample" data-i="1">cracked_game.7z</button>
+      <button class="sample" data-i="2">invoice.pdf.exe</button>
+      <button class="sample" data-i="3">update_helper.ps1</button>
+      <button class="sample" data-i="4">notepad.exe</button>
+    </div>
+
+    <div class="stages" id="stages">
+      <div class="stage"><div class="n">01</div><h3>Fingerprints</h3><p>SHA-256 against 1.15M samples from MalwareBazaar and ThreatFox.</p><div class="res"></div></div>
+      <div class="stage"><div class="n">02</div><h3>YARA rules</h3><p>10,700 rules from YARA Forge that recognise whole malware families.</p><div class="res"></div></div>
+      <div class="stage"><div class="n">03</div><h3>Archives</h3><p>ZIP, 7z, RAR, TAR, CAB and ISO, two levels deep, bomb-safe.</p><div class="res"></div></div>
+      <div class="stage"><div class="n">04</div><h3>Heuristics</h3><p>Encoded PowerShell, injection APIs, fake extensions, obfuscation.</p><div class="res"></div></div>
+      <div class="stage"><div class="n">05</div><h3>Signature</h3><p>Authenticode check with Windows' own WinVerifyTrust.</p><div class="res"></div></div>
+    </div>
+    <div class="verdict" id="verdict" aria-live="polite"></div>
+  </div>
+</section>
+
+<section id="app">
+  <div class="wrap">
+    <div class="app-head">
+      <div>
+        <div class="kicker"><b>02</b> The app</div>
+        <h2>Calm when it's quiet.<br>Loud when it matters.</h2>
+      </div>
+      <div class="seg" role="group" aria-label="App theme">
+        <button data-shot="dark" aria-pressed="true">Dark</button>
+        <button data-shot="light" aria-pressed="false">Light</button>
+      </div>
+    </div>
+    <div class="shot">
+      <img src="assets/app-dark.png" alt="Sentinel dashboard in dark mode, showing You're protected" id="shot-dark">
+      <img src="assets/app-light.png" alt="Sentinel dashboard in light mode" id="shot-light" class="hidden">
+    </div>
+    <div class="notes">
+      <div><h3>Updates itself</h3><p>The Updates tab pulls the newest release from GitHub, checks its SHA-256 against the one GitHub publishes, and installs it. Settings are kept.</p></div>
+      <div><h3>Dark, light, or Windows</h3><p>Switches instantly, including the popups and the window's title bar. "Match Windows" follows the system setting as it changes.</p></div>
+      <div><h3>Nothing happens without you</h3><p>Sentinel never ends a program or deletes a file on its own. Every action is a button you press.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="protection">
+  <div class="wrap">
+    <div class="kicker"><b>03</b> Real-time protection</div>
+    <h2>Four watchers.<br>One background agent.</h2>
+    <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
+
+    <div class="layers">
+      <div class="layer">
+        <div class="n">DL</div>
+        <div><h3>Download protection</h3><p>New files in your Downloads folder are scanned the moment they finish downloading — including everything inside archives.</p></div>
+        <div class="toast"><div class="t-title"><span>Virus detected</span><span>✕</span></div><div class="t-file mono">cracked_game.7z</div><div class="t-detail">Inside archive: setup.exe — Matches known threat: RedLine (ThreatFox)</div><div class="t-actions"><span class="q">Quarantine</span><span class="d">Delete</span><span>Ignore</span></div></div>
+      </div>
+      <div class="layer">
+        <div class="n">PR</div>
+        <div><h3>Program protection</h3><p>Each new program is checked within about a second of starting, and everything already running gets a background sweep. Verdicts are cached, so it costs about 0.3% of one CPU core.</p></div>
+        <div class="toast"><div class="t-title"><span>Virus running</span><span>✕</span></div><div class="t-file mono">svchosts.exe · PID 7720</div><div class="t-detail">Matches known threat: Lumma Stealer (MalwareBazaar)</div><div class="t-actions"><span class="d">End program</span><span class="q">End &amp; quarantine</span></div></div>
+      </div>
+      <div class="layer">
+        <div class="n">ST</div>
+        <div><h3>Startup protection</h3><p>Alerts when something adds itself to the Run keys, a Startup folder or Task Scheduler. Programs signed by Microsoft are logged quietly — except launchers like PowerShell and rundll32, which malware loves to hide behind.</p></div>
+        <div class="toast warn"><div class="t-title"><span>New startup program</span><span>✕</span></div><div class="t-file">UpdaterHelper will run when Windows starts</div><div class="t-detail">tampered.exe isn't signed by a known publisher</div><div class="t-actions"><span class="d">Remove</span><span>Keep</span></div></div>
+      </div>
+      <div class="layer">
+        <div class="n">RW</div>
+        <div><h3>Ransomware protection</h3><p>Watches Documents, Desktop, Pictures, Music, Videos and Downloads for files suddenly turning into unreadable data, then names the program writing the most to disk right now.</p></div>
+        <div class="toast"><div class="t-title"><span>Possible ransomware</span><span>✕</span></div><div class="t-file">14 files suddenly became unreadable</div><div class="t-detail">Likely cause: invoice_viewer.exe (312 MB written just now)</div><div class="t-actions"><span class="d">End program</span><span class="q">Quarantine</span><span>Ignore</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="languages">
+  <div class="wrap">
+    <div class="kicker"><b>04</b> Five languages</div>
+    <h2>Speaks your language.</h2>
+    <p class="lede" style="margin-top:22px">Starts in your Windows display language and switches live — popups, tray menu, activity log, installer and uninstaller included. Dates and numbers follow local formats.</p>
+    <div class="langs">
+      <div>You're protected<small>ENGLISH</small></div>
+      <div lang="zh-Hans">你已受到保护<small>简体中文</small></div>
+      <div lang="hi">आप सुरक्षित हैं<small>हिन्दी</small></div>
+      <div lang="es">Estás protegido<small>ESPAÑOL</small></div>
+      <div lang="fr">Vous êtes protégé<small>FRANÇAIS</small></div>
+    </div>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="wrap">
+    <div class="split" style="margin-bottom:0">
+      <div>
+        <div class="kicker"><b>05</b> Honest limits</div>
+        <h2>What it can't do.</h2>
+      </div>
+      <p class="lede">Sentinel is a portfolio project, not a replacement for Microsoft Defender. Keep Defender on. Here's exactly where the edges are.</p>
+    </div>
+    <div class="limits">
+      <div class="limit"><h3>No blocking before launch</h3><p>That takes a Windows kernel driver. Sentinel detects and responds within about a second instead.</p></div>
+      <div class="limit"><h3>Brand-new malware can slip by</h3><p>If no fingerprint, rule or heuristic covers it yet, it won't be caught. That's true of every antivirus; this one has fewer layers.</p></div>
+      <div class="limit"><h3>Ransomware is caught after it starts</h3><p>It triggers after about ten files are affected, and the "likely cause" is a best guess from disk activity.</p></div>
+      <div class="limit"><h3>Runs as you, not as admin</h3><p>It can't end programs running as administrator or remove all-users startup entries without elevation.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap install">
+    <div>
+      <div class="kicker"><b>06</b> Install</div>
+      <h2>Two minutes,<br>no admin rights.</h2>
+      <ol class="steps" style="margin-top:36px">
+        <li><div><b>Download SentinelSetup.exe</b><span>From the latest GitHub release. Its SHA-256 is listed in the release notes.</span></div></li>
+        <li><div><b>Get past SmartScreen</b><span>The installer isn't code-signed yet, so Windows warns you. Click More info → Run anyway.</span></div></li>
+        <li><div><b>Pick a language and options</b><span>Desktop shortcut, start with Windows. It installs for your account only.</span></div></li>
+        <li><div><b>Turn on protection</b><span>The first time, Sentinel downloads its threat database (about 50 MB). After that it updates itself every 6 hours.</span></div></li>
+      </ol>
+      <div class="cta" style="margin-top:30px">
+        <a class="btn primary" href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe">Download for Windows</a>
+      </div>
+    </div>
+    <div>
+      <div class="kicker" style="margin-top:6px">Or run it from source</div>
+<pre><span class="c"># Python 3.11+</span>
+git clone https://github.com/willischilling/sentinel-antivirus
+cd sentinel-antivirus
+pip install -r requirements.txt
+python gui.py
+
+<span class="c"># there's a CLI too</span>
+python cli.py scan %USERPROFILE%\Downloads</pre>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Threat data from <a href="https://bazaar.abuse.ch/">MalwareBazaar</a> and <a href="https://threatfox.abuse.ch/">ThreatFox</a> by abuse.ch, and <a href="https://github.com/YARAHQ/yara-forge">YARA Forge</a>. Only fingerprints and rule text are downloaded — never malware samples.</p>
+    <p><a href="https://github.com/willischilling/sentinel-antivirus">github.com/willischilling/sentinel-antivirus</a></p>
+  </div>
+</footer>
+
+<script>
+// ---- live activity feed (a scripted example of the app's real log format) ----
+const lines = [
+  ["muted", "Protection started — watching Downloads"],
+  ["muted", "Threat database updated: 1,151,184 malware fingerprints, 10,691 YARA rules"],
+  ["ok", "Checked chrome_setup.exe — signed by Google LLC"],
+  ["muted", "Trusted startup entry: MicrosoftEdgeAutoLaunch (signed by Microsoft Corporation)"],
+  ["ok", "Checked holiday_photos.zip — 212 files, clean"],
+  ["threat", "Virus detected: free_robux_generator.exe — AsyncRAT (ThreatFox)", true],
+  ["muted", "Quarantined free_robux_generator.exe"],
+  ["warn", "Suspicious file: invoice.pdf.exe — double extension"],
+  ["ok", "Checked discord_setup.exe — signed by Discord Inc."],
+  ["muted", "Threat database updated: +382 new fingerprints"],
+];
+const log = document.getElementById("log"), toast = document.getElementById("toast");
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+let clock = new Date(); clock.setHours(9, 41, 7);
+let li = 0;
+function stamp() { clock = new Date(clock.getTime() + (8 + Math.random() * 50) * 1000); return clock.toTimeString().slice(0, 8); }
+function addLine() {
+  const [cls, text, alert] = lines[li % lines.length]; li++;
+  const d = document.createElement("div");
+  d.innerHTML = `<time>${stamp()}</time><span class="${cls}"></span>`;
+  d.lastChild.textContent = text;
+  log.appendChild(d);
+  while (log.children.length > 12) log.firstChild.remove();
+  if (alert) { toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 3800); }
+}
+for (let i = 0; i < 4; i++) addLine();
+if (!reduce) setInterval(addLine, 1700); else while (li < lines.length) addLine();
+
+// ---- scanner pipeline demo ----
+const samples = [
+  { stop: 0, kind: "threat", res: ["match: AsyncRAT (ThreatFox)"], verdict: "Virus detected", why: "Exact fingerprint match. Nothing else needs to run." },
+  { stop: 2, kind: "threat", res: ["no match", "no rule hit", "setup.exe inside matches RedLine (ThreatFox)"], verdict: "Virus detected", why: "The archive itself is unknown; the program inside it isn't." },
+  { stop: 3, kind: "sus", res: ["no match", "no rule hit", "not an archive", "program pretending to be a .pdf"], verdict: "Suspicious", why: "Unsigned, so nothing clears the warning." },
+  { stop: 3, kind: "sus", res: ["no match", "no rule hit", "not an archive", "encoded PowerShell (-enc)"], verdict: "Suspicious", why: "Scripts can't carry a publisher signature, so the warning stands." },
+  { stop: -1, kind: "clean", res: ["no match", "no rule hit", "not an archive", "nothing found", "Microsoft Windows ✓"], verdict: "Clean", why: "Verified with Windows' own WinVerifyTrust." },
+];
+const stages = [...document.querySelectorAll(".stage")], verdict = document.getElementById("verdict");
+let run = 0;
+function play(i) {
+  const s = samples[i], id = ++run, last = s.stop < 0 ? stages.length - 1 : s.stop;
+  stages.forEach(el => { el.className = "stage"; el.querySelector(".res").textContent = ""; });
+  verdict.innerHTML = "";
+  const step = reduce ? 0 : 420;
+  stages.forEach((el, k) => setTimeout(() => {
+    if (id !== run) return;
+    if (k > last) { el.classList.add("skipped"); return; }
+    el.classList.add("active");
+    setTimeout(() => {
+      if (id !== run) return;
+      el.classList.remove("active");
+      el.querySelector(".res").textContent = s.res[k] || "";
+      el.classList.add(k === s.stop ? "hit" : "done");
+      if (k === s.stop && s.kind === "sus") el.classList.add("sus");
+      if (k === last) verdict.innerHTML = `<span class="tag ${s.kind === "sus" ? "sus" : s.kind}">${s.verdict.toUpperCase()}</span><span class="why">${s.why}</span>`;
+    }, step * .8);
+  }, k * step));
+}
+document.querySelectorAll(".sample").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".sample").forEach(x => x.setAttribute("aria-pressed", x === b));
+  play(+b.dataset.i);
+}));
+new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { play(0); o.disconnect(); } }, { threshold: .4 })
+  .observe(document.getElementById("stages"));
+
+// ---- dark / light screenshot ----
+document.querySelectorAll("[data-shot]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-shot]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  document.getElementById("shot-dark").classList.toggle("hidden", b.dataset.shot !== "dark");
+  document.getElementById("shot-light").classList.toggle("hidden", b.dataset.shot !== "light");
+}));
+
+// ---- contact (address assembled here so it isn't plain text in the page) ----
+const email = ["williamgmatheney", "gmail.com"].join("@");
+const pop = document.getElementById("contact-pop"), cbtn = document.getElementById("contact-btn");
+document.getElementById("contact-email").textContent = email;
+document.getElementById("contact-mail").href = "mailto:" + email + "?subject=Sentinel%20Antivirus";
+cbtn.addEventListener("click", e => {
+  e.stopPropagation();
+  const open = pop.classList.toggle("open");
+  cbtn.setAttribute("aria-expanded", open);
+});
+pop.addEventListener("click", e => e.stopPropagation());
+document.addEventListener("click", () => { pop.classList.remove("open"); cbtn.setAttribute("aria-expanded", false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") document.dispatchEvent(new Event("click")); });
+document.getElementById("contact-copy").addEventListener("click", e => {
+  navigator.clipboard.writeText(email).then(() => {
+    e.target.textContent = "Copied";
+    setTimeout(() => e.target.textContent = "Copy", 1500);
+  }).catch(() => getSelection().selectAllChildren(document.getElementById("contact-email")));
+});
+
+// ---- latest release details from GitHub ----
+fetch("https://api.github.com/repos/willischilling/sentinel-antivirus/releases/latest")
+  .then(r => r.ok ? r.json() : Promise.reject())
+  .then(rel => {
+    const asset = (rel.assets || []).find(a => a.name === "SentinelSetup.exe");
+    const mb = asset ? Math.round(asset.size / 1048576) + " MB" : "";
+    const date = new Date(rel.published_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    const meta = document.getElementById("release-meta");
+    meta.textContent = [rel.tag_name, date, mb].filter(Boolean).join(" · ") + " · ";
+    const a = document.createElement("a"); a.href = rel.html_url; a.textContent = "release notes"; meta.appendChild(a);
+  })
+  .catch(() => {});
+</script>
+</body>
+</html>

@@ -299,6 +299,11 @@ class Agent(tk.Tk):
             # Windows adds and updates its own tasks all the time; don't pop up for those.
             activity.log(t("log_windows_task", name=entry.name), "muted")
             return
+        trusted = None if is_threat else startup_watcher.trusted_reason(entry, program, signature)
+        if trusted:
+            by = t("trusted_component") if trusted == "component" else trusted
+            activity.log(t("log_trusted_startup", name=entry.name, publisher=by), "muted")
+            return
         short_name = entry.name.rsplit("\\", 1)[-1]
         if is_threat:
             title, accent = t("startup_virus_task" if is_task else "startup_virus_program"), C.BAD

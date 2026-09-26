@@ -33,14 +33,29 @@ DEFAULT_REG_LOCATIONS = [
 ]
 IGNORED_NAMES = {"SentinelAntivirus"}  # our own start-with-Windows entry
 META_KEY = "startup_known"
-TASKS_META_KEY = "startup_known_tasks"
+# v2: component (COM) tasks are now recorded as "com:{CLSID}" instead of
+# "(no program)", so they get a fresh baseline rather than all looking changed.
+TASKS_META_KEY = "startup_known_tasks_v2"
 TASK_POLL_SECONDS = 300
 TASK_LOCATION = "Scheduled task"
 _TASK_SCRIPT = (
     "Get-ScheduledTask | ForEach-Object { [pscustomobject]@{ n = $_.TaskPath + $_.TaskName; "
-    "a = (($_.Actions | Where-Object { $_.Execute } | ForEach-Object "
-    "{ ($_.Execute + ' ' + $_.Arguments).Trim() }) -join ' ; ') } } | ConvertTo-Json -Compress"
+    "a = (($_.Actions | ForEach-Object { if ($_.Execute) { ($_.Execute + ' ' + $_.Arguments).Trim() } "
+    "elseif ($_.ClassId) { 'com:' + $_.ClassId } }) -join ' ; ') } } | ConvertTo-Json -Compress"
 )
+COM_PREFIX = "com:"
+
+# Publishers whose signed programs may add themselves to startup without a popup.
+TRUSTED_PUBLISHERS = {"Microsoft Corporation", "Microsoft Windows", "Microsoft Windows Publisher"}
+# Microsoft-signed programs that run whatever they're told to. Malware often
+# hides behind these, so entries launching them always alert.
+LAUNCHERS = {
+    "powershell.exe", "pwsh.exe", "powershell_ise.exe", "cmd.exe", "wscript.exe", "cscript.exe", "mshta.exe",
+    "rundll32.exe", "regsvr32.exe", "msiexec.exe", "explorer.exe", "conhost.exe", "schtasks.exe", "forfiles.exe",
+    "certutil.exe", "bitsadmin.exe", "curl.exe", "wmic.exe", "msbuild.exe", "installutil.exe", "regasm.exe",
+    "regsvcs.exe", "cmstp.exe", "odbcconf.exe", "pcalua.exe", "hh.exe", "bash.exe", "wsl.exe", "msdt.exe",
+    "control.exe", "mmc.exe", "wmiprvse.exe", "scriptrunner.exe", "syncappvpublishingserver.exe",
+}
 CREATE_NO_WINDOW = 0x08000000
 
 
@@ -94,9 +109,28 @@ def snapshot(reg_locations=None, folder_locations=None) -> dict[str, StartupEntr
     return entries
 
 
+def com_server(clsid: str) -> str | None:
+    """The file registered for a COM class (what a component task really runs), or None if it
+    isn't registered the classic way (Store/packaged app components, which are signed packages)."""
+    for sub_key in ("InprocServer32", "LocalServer32"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"CLSID\{clsid}\{sub_key}", 0,
+                                winreg.KEY_READ | winreg.KEY_WOW64_64KEY) as k:
+                value = winreg.QueryValueEx(k, "")[0]
+        except OSError:
+            continue
+        if value:
+            return str(value)
+    return None
+
+
 def target_program(entry: StartupEntry) -> Path | None:
     """Best guess at the program a startup entry launches."""
     command = entry.command
+    if command.startswith(COM_PREFIX):
+        command = com_server(command[len(COM_PREFIX):].split(" ; ")[0].strip()) or ""
+        if not command:
+            return None
     if entry.kind == "folder" and entry.file and entry.file.suffix.lower() == ".lnk":
         command = _shortcut_target(entry.file) or command
     command = os.path.expandvars(command.split(" ; ")[0].strip())  # tasks: first action
@@ -110,8 +144,27 @@ def target_program(entry: StartupEntry) -> Path | None:
     path = Path(candidate)
     if not path.is_absolute():  # e.g. plain "powershell.exe"
         found = shutil.which(candidate)
-        path = Path(found) if found else path
+        system32 = Path(os.environ.get("SystemRoot", r"C:\Windows"), "System32", candidate)
+        path = Path(found) if found else system32 if system32.is_file() else path  # DLLs aren't on PATH
     return path if path.is_file() else None
+
+
+def trusted_reason(entry: StartupEntry, program: Path | None, signature) -> str | None:
+    """Why an entry needs no popup (a publisher name, or "component"), or None if it should alert.
+    Only for entries that didn't match any malware."""
+    if program is None:
+        # A component task whose class isn't registered as a file: it's served by an installed
+        # (signed) app package, so there's no dropped file it could be running.
+        if entry.command.startswith(COM_PREFIX) and " ; " not in entry.command:
+            clsid = entry.command[len(COM_PREFIX):].strip()
+            if com_server(clsid) is None:
+                return "component"
+        return None
+    if program.name.lower() in LAUNCHERS:
+        return None
+    if signature.signed and signature.publisher in TRUSTED_PUBLISHERS:
+        return signature.publisher
+    return None
 
 
 def snapshot_tasks() -> dict[str, StartupEntry] | None:

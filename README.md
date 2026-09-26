@@ -2,7 +2,7 @@
 
 A Windows antivirus built from scratch in Python: an on-demand scanner, real-time protection that keeps running in the background, behavior monitoring, and a desktop app with its own installer.
 
-Sentinel checks files against over a million real malware fingerprints and nearly 5,000 YARA rules, looks inside archives, verifies publisher signatures, and watches for programs adding themselves to startup and for ransomware-like activity.
+Sentinel checks files against over a million real malware fingerprints and about 10,700 YARA rules, looks inside archives, verifies publisher signatures, and watches for programs adding themselves to startup and for ransomware-like activity.
 
 > **This is a portfolio / learning project, not a replacement for Microsoft Defender.** It has no kernel driver, so it reacts to threats rather than blocking them before they run. Keep Defender on. See [Limitations](#limitations).
 
@@ -17,9 +17,12 @@ Sentinel checks files against over a million real malware fingerprints and nearl
 ### Detection
 Every file goes through these layers, strongest first:
 
-1. **Known malware fingerprints.** SHA-256 hashes from [MalwareBazaar](https://bazaar.abuse.ch/) (abuse.ch): the full history of over 1.1 million samples, plus a rolling feed of the last 48 hours with malware family names (for example "Mirai (MalwareBazaar)").
-2. **YARA rules.** The [YARA Forge](https://github.com/YARAHQ/yara-forge) "core" rule set (about 5,000 curated rules, chosen for low false positives), which detects whole malware families rather than single files. Rules with a score of 70 or more count as a threat; lower scores count as suspicious.
-3. **Archive contents.** ZIP and JAR are read in memory. 7-Zip, RAR, TAR, CAB and ISO files are listed and extracted with Windows' own Microsoft-signed `tar.exe` (libarchive), so no third-party tools are bundled. Archives inside archives are followed up to two levels deep, across formats.
+1. **Known malware fingerprints.** SHA-256 hashes from two abuse.ch feeds:
+   - [MalwareBazaar](https://bazaar.abuse.ch/): the full history of over 1.1 million samples, plus a rolling feed of the last 48 hours with malware family names (for example "Mirai (MalwareBazaar)").
+   - [ThreatFox](https://threatfox.abuse.ch/): payloads seen in active attack campaigns (AsyncRAT, RedLine, Akira ransomware, fake browser updates...). Only entries rated 75% confidence or higher are used, which adds about 7,000 fingerprints MalwareBazaar doesn't have.
+2. **YARA rules.** The [YARA Forge](https://github.com/YARAHQ/yara-forge) "extended" rule set (about 10,700 curated rules; tested with no false alarms on 2,196 Windows, Program Files and Downloads files), which detects whole malware families rather than single files. Rules with a score of 70 or more count as a threat; lower scores count as suspicious.
+3. **Archive contents.** Low-score YARA hits on the archive file itself are ignored, since those rules would be matching compressed bytes; the files inside are what get checked.
+   ZIP and JAR are read in memory. 7-Zip, RAR, TAR, CAB and ISO files are listed and extracted with Windows' own Microsoft-signed `tar.exe` (libarchive), so no third-party tools are bundled. Archives inside archives are followed up to two levels deep, across formats.
 4. **Heuristics.** Suspicious strings (encoded PowerShell, process-injection APIs, shadow copy deletion...), double extensions like `invoice.pdf.exe`, and obfuscated scripts. The string checks only apply to files that can actually run (programs, scripts, shortcuts, macro-enabled Office files). A log or document that merely *mentions* `powershell -enc` is harmless.
 
 Sentinel never reports its own files. Its data and quarantine folders are skipped, and YARA isn't run against YARA rule files, since they always contain the very strings they look for.
@@ -37,7 +40,7 @@ This runs as a separate background process (`Sentinel.exe --agent`), so it keeps
 |---|---|
 | Download protection | Scans new files in the watched folder (Downloads by default) as soon as they finish downloading. |
 | Program protection | Checks each new program within about a second of it starting, plus a background sweep of everything already running. |
-| Startup protection | Alerts when a program adds itself to the registry Run keys, a Startup folder, or Task Scheduler. |
+| Startup protection | Alerts when a program adds itself to the registry Run keys, a Startup folder, or Task Scheduler. Programs with a valid Microsoft signature (Edge, Windows components) are logged without a popup, except launchers like PowerShell, cmd and rundll32, which malware often hides behind. |
 | Ransomware protection | Watches Documents, Desktop, Pictures, Music, Videos and Downloads for many files suddenly turning into unreadable data or being renamed to strange extensions. |
 
 **Alerts.** These appear as popups in the bottom-right corner, with buttons to act on them:
@@ -172,7 +175,7 @@ Measured results:
 
 ## Credits
 
-- Malware fingerprints: [MalwareBazaar](https://bazaar.abuse.ch/) by abuse.ch
+- Malware fingerprints: [MalwareBazaar](https://bazaar.abuse.ch/) and [ThreatFox](https://threatfox.abuse.ch/) by abuse.ch
 - YARA rules: [YARA Forge](https://github.com/YARAHQ/yara-forge), which packages rules from many open-source authors under their respective licenses
 - Libraries: [yara-python](https://github.com/VirusTotal/yara-python), [watchdog](https://github.com/gorakhargosh/watchdog), [psutil](https://github.com/giampaolo/psutil), [pystray](https://github.com/moses-palmer/pystray), [Pillow](https://python-pillow.org/), [PyInstaller](https://pyinstaller.org/)
 

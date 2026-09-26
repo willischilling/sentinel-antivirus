@@ -66,6 +66,8 @@ def scan_file(path: Path) -> ScanResult:
                 database.log_scan(str(path), result.verdict, name)
                 return result
             archive_flags = [f"Inside archive: {s}" for s in report.suspicious]
+            # Weak rules matched against the compressed bytes are noise; the contents were just checked.
+            yara_hits = []
 
         flags = [f"YARA rule matched: {h.rule}" for h in yara_hits] + heuristics.check_file(path)
         publisher = None

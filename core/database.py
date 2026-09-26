@@ -81,6 +81,8 @@ def lookup_signature(file_hash: str) -> str | None:
             return None
         row = conn.execute("SELECT family FROM malware_hashes WHERE sha256 = ?", (blob,)).fetchone()
         if row:
+            if row[0] and row[0].endswith("(ThreatFox)"):
+                return row[0]
             return f"{row[0]} (MalwareBazaar)" if row[0] else "Known malware (MalwareBazaar)"
         return None
 

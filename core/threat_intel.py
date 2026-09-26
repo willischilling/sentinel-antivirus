@@ -2,7 +2,9 @@
 
 - MalwareBazaar (abuse.ch) SHA-256 fingerprints of real malware: the full
   history once, then the rolling last-48-hours list (with family names).
-- YARA Forge "core" rule set, compiled for core/yara_engine.py.
+- ThreatFox (abuse.ch) SHA-256 hashes of malware payloads seen in active
+  campaigns, with family names (confidence 75% or higher only).
+- YARA Forge "extended" rule set, compiled for core/yara_engine.py.
 
 Only hash lists and rule text are downloaded, never malware samples.
 """
@@ -19,7 +21,10 @@ from . import database, paths, yara_engine
 
 MB_FULL_URL = "https://bazaar.abuse.ch/export/txt/sha256/full/"
 MB_RECENT_URL = "https://bazaar.abuse.ch/export/csv/recent/"
-YARA_CORE_URL = "https://github.com/YARAHQ/yara-forge/releases/latest/download/yara-forge-rules-core.zip"
+TF_FULL_URL = "https://threatfox.abuse.ch/export/csv/sha256/full/"  # small (~1 MB), so fetched whole each time
+TF_MIN_CONFIDENCE = 75
+# "extended" (~10,700 rules) over "core" (~5,000): no extra false alarms on 2,196 test files, ~1.5x scan time
+YARA_RULES_URL = "https://github.com/YARAHQ/yara-forge/releases/latest/download/yara-forge-rules-extended.zip"
 UPDATE_EVERY_SECONDS = 6 * 3600  # the recent feed covers 48h, so this never misses entries
 USER_AGENT = "Sentinel-Antivirus/1.0"
 LOCK_PATH = paths.DATA_DIR / "update.lock"
@@ -104,11 +109,27 @@ def _install_recent_hashes(progress):
     database.add_feed_hashes(entries, replace_family=True)
 
 
+def _install_threatfox_hashes(progress):
+    progress("intel_downloading_threatfox")
+    archive = zipfile.ZipFile(io.BytesIO(_download(TF_FULL_URL)))
+    name = next(n for n in archive.namelist() if n.endswith(".csv"))
+    text = archive.read(name).decode("utf-8", errors="replace")
+    rows = csv.reader((line for line in text.splitlines() if line and not line.startswith("#")),
+                      skipinitialspace=True)
+    entries = []
+    for row in rows:
+        # first_seen, id, ioc_value, ioc_type, threat_type, malware, alias, malware_printable, last_seen, confidence
+        if len(row) > 9 and row[3] == "sha256_hash" and row[9].isdigit() and int(row[9]) >= TF_MIN_CONFIDENCE:
+            family = row[7].strip() or "Known malware"
+            entries.append((row[2], f"{family} (ThreatFox)"))
+    database.add_feed_hashes(entries)  # never overrides MalwareBazaar's names
+
+
 def _install_yara_rules(progress):
     if yara_engine.yara is None:
         return
     progress("intel_downloading_yara")
-    archive = zipfile.ZipFile(io.BytesIO(_download(YARA_CORE_URL)))
+    archive = zipfile.ZipFile(io.BytesIO(_download(YARA_RULES_URL)))
     name = next(n for n in archive.namelist() if n.endswith(".yar"))
     source = archive.read(name).decode("utf-8", errors="replace")
     progress("intel_compiling_yara")
@@ -128,6 +149,7 @@ def update(progress=lambda key: None) -> dict:
         if not database.get_meta("intel_full_installed"):
             _install_full_hashes(progress)
         _install_recent_hashes(progress)
+        _install_threatfox_hashes(progress)
         _install_yara_rules(progress)
         database.set_meta(
             intel_updated=_now_iso(),
