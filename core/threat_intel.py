@@ -17,7 +17,7 @@ import urllib.request
 import zipfile
 from datetime import datetime, timezone
 
-from . import database, paths, yara_engine
+from . import database, link_intel, paths, yara_engine
 
 MB_FULL_URL = "https://bazaar.abuse.ch/export/txt/sha256/full/"
 MB_RECENT_URL = "https://bazaar.abuse.ch/export/csv/recent/"
@@ -151,6 +151,7 @@ def update(progress=lambda key: None) -> dict:
         _install_recent_hashes(progress)
         _install_threatfox_hashes(progress)
         _install_yara_rules(progress)
+        link_intel.install(progress)
         database.set_meta(
             intel_updated=_now_iso(),
             intel_hashes=database.feed_hash_count(),

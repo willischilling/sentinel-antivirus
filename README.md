@@ -56,6 +56,22 @@ Nothing is ended or deleted without a click.
 
 **Threat database updates.** The fingerprint list and YARA rules update automatically every 6 hours. The first download is about 45 MB; later updates take a few seconds.
 
+### Ask Sentinel (scam checker)
+A chat tab for weird messages, sketchy links and security questions. It works in two layers:
+
+1. **Built-in checks**, instant and offline. Every link is looked up in about 390,000 known phishing domains ([Phishing.Database](https://github.com/Phishing-Database/Phishing.Database)) and the live [URLhaus](https://urlhaus.abuse.ch/) and [OpenPhish](https://openphish.com/) lists, which update with the threat database. Links are also checked for:
+   - brand look-alikes (`roblox-free-rewards.xyz`, `paypa1-secure.com`)
+   - disguised characters (punycode), bare IP addresses and link shorteners
+   - cheap throwaway domain endings, and links that download programs
+
+   The message text is checked for gift-card and prize scams, requests for passwords or codes, remote-access tools, fake tech support, urgency and non-refundable payments. Shared hosting sites like sites.google.com are never flagged as a whole.
+2. **A local AI** that explains the result in plain words, in the app's language. It's [Qwen3 4B](https://huggingface.co/Qwen/Qwen3-4B-GGUF) (Apache 2.0), run by [llama.cpp](https://github.com/ggml-org/llama.cpp) **on your PC**: no account, no API key, and nothing you type leaves the computer.
+   - It gets the built-in check results as facts, so it doesn't have to guess about links.
+   - The model is a one-time 2.5 GB download from a pinned Hugging Face revision, verified against its SHA-256, and it can resume if interrupted.
+   - It loads on the first question and unloads after 5 idle minutes to free about 3 GB of memory. Answers stream in, typically in 5 to 15 seconds.
+
+Without the AI download, the built-in checks still work on their own.
+
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
 - A scanner for Downloads, Desktop, Documents or any folder, with an animated progress ring.
@@ -144,6 +160,7 @@ installer/  ── setup wizard, uninstaller, shortcut creation
 widgets.py, theme.py ── custom UI widgets (rounded cards, switches, rings) and colors
 core/i18n.py, core/translations.py ── the 5 languages (about 250 phrases each), plurals and local formats
 core/app_update.py ── checks GitHub for new releases, downloads and verifies the installer
+ask_page.py, core/scam_check.py, core/link_intel.py, core/assistant.py ── Ask Sentinel: chat tab, built-in checks, link lists, local AI
 theme.py ── dark and light palettes, swapped live
 ```
 
@@ -179,6 +196,8 @@ Measured results:
 
 - Malware fingerprints: [MalwareBazaar](https://bazaar.abuse.ch/) and [ThreatFox](https://threatfox.abuse.ch/) by abuse.ch
 - YARA rules: [YARA Forge](https://github.com/YARAHQ/yara-forge), which packages rules from many open-source authors under their respective licenses
+- Local AI: [Qwen3 4B](https://huggingface.co/Qwen/Qwen3-4B-GGUF) by the Qwen team (Apache 2.0), run with [llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
+- Link lists: [Phishing.Database](https://github.com/Phishing-Database/Phishing.Database), [URLhaus](https://urlhaus.abuse.ch/), [OpenPhish](https://openphish.com/)
 - Libraries: [yara-python](https://github.com/VirusTotal/yara-python), [watchdog](https://github.com/gorakhargosh/watchdog), [psutil](https://github.com/giampaolo/psutil), [pystray](https://github.com/moses-palmer/pystray), [Pillow](https://python-pillow.org/), [PyInstaller](https://pyinstaller.org/)
 
 Threat data is downloaded at runtime and not redistributed with the app. Only hash lists and rule text are downloaded, never malware samples.

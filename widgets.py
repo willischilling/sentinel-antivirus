@@ -36,6 +36,7 @@ ICONS = {
     "info": "",
     "update": "",
     "cloud": "",
+    "chat": "",
 }
 _icon_family = None
 

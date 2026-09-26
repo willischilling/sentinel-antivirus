@@ -15,14 +15,15 @@ from tkinter import filedialog, messagebox, ttk
 import launcher
 import single_instance
 from core import (
-    activity, app_update, autostart, database, i18n, paths, quarantine, scanner, settings, signatures,
-    threat_intel,
+    activity, app_update, assistant, autostart, database, i18n, paths, quarantine, scanner, settings,
+    signatures, threat_intel,
 )
 from core.i18n import duration, number, plural, relative, t
 from core.version import VERSION
 import theme as C
 from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE
 from widgets import EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label
+from ask_page import AskPage, ChatState
 
 
 def configure_style(root: tk.Tk):
@@ -50,6 +51,12 @@ def configure_style(root: tk.Tk):
     style.map("Treeview.Heading", background=[("active", C.CARD)])
     style.map("Treeview", background=[("selected", C.ACCENT_DARK)], foreground=[("selected", "#ffffff")])
     style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
+    # Slim scrollbar with no arrows, in the theme's colors
+    style.layout("Slim.Vertical.TScrollbar", [("Vertical.Scrollbar.trough", {"sticky": "ns", "children": [
+        ("Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
+    style.configure("Slim.Vertical.TScrollbar", troughcolor=C.CARD, background=C.BORDER, bordercolor=C.CARD,
+                    lightcolor=C.BORDER, darkcolor=C.BORDER, gripcount=0, arrowsize=8, width=8)
+    style.map("Slim.Vertical.TScrollbar", background=[("active", C.TEXT_MUTED)])
     style.configure("TEntry", fieldbackground=C.CARD, foreground=C.TEXT, insertcolor=C.TEXT, borderwidth=1)
     style.configure("Horizontal.TProgressbar", background=C.ACCENT, troughcolor=C.BORDER, borderwidth=0,
                     bordercolor=C.BORDER, lightcolor=C.ACCENT, darkcolor=C.ACCENT, thickness=8)
@@ -127,11 +134,13 @@ class App(tk.Tk):
         self._load_images()
         # App update status, kept outside the widgets so it survives a language rebuild.
         self._update = {"state": "checking", "release": None, "error": None, "progress": (0, 0)}
+        self.ask_state = ChatState()  # the Ask Sentinel conversation, also kept across rebuilds
 
         self._build_layout()
         self._show_page("dashboard")
         self.after(200, self._pump_queue)
         self.after(2500, self._check_for_updates)  # quietly, in the background
+        self.after(60_000, self._unload_idle_ai)
         self.after(3000, self._follow_windows_theme)
 
         if autostart.supported() and autostart.is_enabled():
@@ -141,6 +150,10 @@ class App(tk.Tk):
         elif threat_intel.needs_update():
             self._start_intel_update()  # the agent normally does this, but it isn't running
         self._poll_agent()
+
+    def _unload_idle_ai(self):
+        assistant.Assistant.unload_if_idle()  # frees ~3 GB of memory a few minutes after the last question
+        self.after(60_000, self._unload_idle_ai)
 
     def _load_images(self):
         self._logo_small = self._logo_big = None
@@ -176,6 +189,7 @@ class App(tk.Tk):
         for key, icon, label in [
             ("dashboard", "home", "nav_dashboard"),
             ("scan", "scan", "nav_scanner"),
+            ("ask", "chat", "nav_ask"),
             ("protection", "shield", "nav_protection"),
             ("quarantine", "lock", "nav_quarantine"),
             ("activity", "history", "nav_history"),
@@ -205,6 +219,8 @@ class App(tk.Tk):
         self.pages = {}
         self._build_dashboard_page()
         self._build_scan_page()
+        self.ask_page = AskPage(self.content, self, logo=self._logo_big)
+        self.pages["ask"] = self.ask_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -1221,6 +1237,8 @@ class App(tk.Tk):
                     self._on_scan_progress(payload)
                 elif kind == "scan_done":
                     self._on_scan_done(payload)
+                elif kind.startswith("ask_"):
+                    self.ask_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
@@ -1253,6 +1271,10 @@ def main():
         from core import elevate
 
         sys.exit(elevate.main(sys.argv[2:]))
+    if "--check-ai" in sys.argv:  # diagnostics: exit code 0 if the local AI engine loads
+        from core import assistant as ai
+
+        sys.exit(0 if ai.engine_available() else 1)
     if "--agent" in sys.argv:
         import agent
 

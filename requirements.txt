@@ -1,5 +1,8 @@
+# Prebuilt Windows builds of llama-cpp-python (the local AI engine for Ask Sentinel)
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
 watchdog>=4.0.0
 psutil>=5.9.0
 pystray>=0.19.5
 pillow>=10.0.0
 yara-python>=4.5.0
+llama-cpp-python>=0.3.35

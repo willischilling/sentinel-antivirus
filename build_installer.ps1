@@ -10,6 +10,9 @@ python -m PyInstaller --noconfirm --onedir --windowed --name Sentinel `
     --icon "$root\assets\icon.ico" `
     --hidden-import pystray._win32 `
     --hidden-import yara `
+    --collect-submodules llama_cpp `
+    --collect-binaries llama_cpp `
+    --collect-data llama_cpp `
     --add-data "$root\assets\icon.ico;assets" `
     --add-data "$root\assets\icon.png;assets" `
     --add-data "$root\assets\emblem.png;assets" `
