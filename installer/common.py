@@ -4,7 +4,7 @@ from pathlib import Path
 
 APP_NAME = "Sentinel Antivirus"
 PUBLISHER = "Sentinel"
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 INSTALL_DIR = Path(os.environ["LOCALAPPDATA"]) / APP_NAME
 APP_SUBDIR = "app"  # the --onedir build's folder, so its DLLs don't clutter INSTALL_DIR

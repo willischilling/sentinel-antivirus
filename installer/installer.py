@@ -4,6 +4,7 @@ pre-built app exe and uninstaller exe as payload data.
 import shutil
 import subprocess
 import sys
+import time
 import tkinter as tk
 import winreg
 from pathlib import Path
@@ -141,54 +142,97 @@ class SetupWizard(tk.Tk):
         self.progress.stop()
         self._build_finish_page()
 
+    def _status(self, text):
+        self.status_label.configure(text=text)
+        self.update_idletasks()
+
     def _do_install(self):
         src = payload_dir()
-        INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+        app_src = src / "app"
+        if not (app_src / APP_EXE_NAME).is_file() or not (src / UNINSTALL_EXE_NAME).is_file():
+            raise RuntimeError("This installer is incomplete or damaged (the app files are missing). "
+                               "Please download it again.")
 
         # An upgrade can't overwrite files the running app has open. This ends
         # both the window and the background agent (same exe).
-        subprocess.run(["taskkill", "/IM", APP_EXE_NAME, "/F"], capture_output=True, check=False)
-
-        app_src = src / "app"
-        if app_src.exists():
-            shutil.copytree(app_src, INSTALL_DIR / APP_SUBDIR, dirs_exist_ok=True)
-        for name in (UNINSTALL_EXE_NAME, ICON_NAME):
-            source_file = src / name
-            if source_file.exists():
-                shutil.copy2(source_file, INSTALL_DIR / name)
-
+        subprocess.run(["taskkill", "/IM", APP_EXE_NAME, "/F"], capture_output=True, check=False,
+                       creationflags=0x08000000)
         app_exe = INSTALL_DIR / APP_SUBDIR / APP_EXE_NAME
         icon = INSTALL_DIR / ICON_NAME
         uninstall_exe = INSTALL_DIR / UNINSTALL_EXE_NAME
+        try:
+            self._status("Copying files...")
+            INSTALL_DIR.mkdir(parents=True, exist_ok=True)
+            self._copy_with_retry(lambda: shutil.copytree(app_src, INSTALL_DIR / APP_SUBDIR, dirs_exist_ok=True))
+            for name in (UNINSTALL_EXE_NAME, ICON_NAME):
+                if (src / name).is_file():
+                    self._copy_with_retry(lambda n=name: shutil.copy2(src / n, INSTALL_DIR / n))
+            # Nothing may point at the app until it's verifiably in place.
+            if not app_exe.is_file() or not uninstall_exe.is_file():
+                raise RuntimeError("Sentinel's files didn't finish copying. Another security program may "
+                                   "have blocked them.")
 
-        self.status_label.configure(text="Creating shortcuts...")
-        self.update_idletasks()
-        app_dir = INSTALL_DIR / APP_SUBDIR
-        create_shortcut(
-            START_MENU_DIR / f"{APP_NAME}.lnk", app_exe, app_dir, icon,
-            description="Signature + heuristic antivirus scanner",
-        )
-        desktop_link = desktop_dir() / f"{APP_NAME}.lnk"
-        legacy_link = LEGACY_DESKTOP_DIR / f"{APP_NAME}.lnk"
-        if legacy_link != desktop_link:
-            legacy_link.unlink(missing_ok=True)
-        if self.desktop_shortcut_var.get():
-            create_shortcut(desktop_link, app_exe, app_dir, icon,
+            self._status("Registering with Windows...")
+            self._write_uninstall_registry(app_exe, icon, uninstall_exe)
+
+            self._status("Creating shortcuts...")
+            app_dir = INSTALL_DIR / APP_SUBDIR
+            create_shortcut(START_MENU_DIR / f"{APP_NAME}.lnk", app_exe, app_dir, icon,
                             description="Signature + heuristic antivirus scanner")
-        else:
-            desktop_link.unlink(missing_ok=True)
-
-        self.status_label.configure(text="Registering with Windows...")
-        self.update_idletasks()
-        self._write_uninstall_registry(app_exe, icon, uninstall_exe)
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY) as key:
-            if self.autostart_var.get():
-                winreg.SetValueEx(key, REG_RUN_VALUE, 0, winreg.REG_SZ, f'"{app_exe}" --agent')
+            desktop_link = desktop_dir() / f"{APP_NAME}.lnk"
+            legacy_link = LEGACY_DESKTOP_DIR / f"{APP_NAME}.lnk"
+            if legacy_link != desktop_link:
+                legacy_link.unlink(missing_ok=True)
+            if self.desktop_shortcut_var.get():
+                create_shortcut(desktop_link, app_exe, app_dir, icon,
+                                description="Signature + heuristic antivirus scanner")
             else:
+                desktop_link.unlink(missing_ok=True)
+
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY) as key:
+                if self.autostart_var.get():
+                    winreg.SetValueEx(key, REG_RUN_VALUE, 0, winreg.REG_SZ, f'"{app_exe}" --agent')
+                else:
+                    try:
+                        winreg.DeleteValue(key, REG_RUN_VALUE)
+                    except FileNotFoundError:
+                        pass
+        except Exception:
+            if not app_exe.is_file():
+                self._remove_dangling_entries()
+                shutil.rmtree(INSTALL_DIR / APP_SUBDIR, ignore_errors=True)
                 try:
-                    winreg.DeleteValue(key, REG_RUN_VALUE)
-                except FileNotFoundError:
+                    INSTALL_DIR.rmdir()  # only succeeds if nothing else (user data) is in it
+                except OSError:
                     pass
+            raise
+
+    @staticmethod
+    def _copy_with_retry(copy, attempts=5):
+        """Files of a just-closed Sentinel can stay locked for a moment."""
+        for attempt in range(attempts):
+            try:
+                return copy()
+            except PermissionError:
+                if attempt == attempts - 1:
+                    raise
+                time.sleep(1)
+
+    @staticmethod
+    def _remove_dangling_entries():
+        """After a failed install, remove anything that would point at a missing
+        Sentinel.exe, so the user isn't left with broken shortcuts."""
+        for link in (START_MENU_DIR / f"{APP_NAME}.lnk", desktop_dir() / f"{APP_NAME}.lnk"):
+            link.unlink(missing_ok=True)
+        for hive_key, value in ((REG_RUN_KEY, REG_RUN_VALUE), (REG_UNINSTALL_KEY, None)):
+            try:
+                if value:
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, hive_key, 0, winreg.KEY_SET_VALUE) as k:
+                        winreg.DeleteValue(k, value)
+                else:
+                    winreg.DeleteKey(winreg.HKEY_CURRENT_USER, hive_key)
+            except FileNotFoundError:
+                pass
 
     def _write_uninstall_registry(self, app_exe: Path, icon: Path, uninstall_exe: Path):
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_UNINSTALL_KEY) as key:
