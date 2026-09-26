@@ -31,6 +31,7 @@ from vpn_page import VpnPage, new_state as new_vpn_state
 from firewall_page import FirewallPage, new_state as new_fw_state
 from app_updates_card import AppUpdatesCard, new_state as new_appupd_state
 from webprotect_page import WebProtectPage, new_state as new_web_state
+from security_page import SecurityPage, new_state as new_sec_state, score_color
 
 
 def configure_style(root: tk.Tk):
@@ -161,12 +162,14 @@ class App(tk.Tk):
         self.fw_state = new_fw_state()
         self.appupd_state = new_appupd_state()
         self.web_state = new_web_state()
+        self.sec_state = new_sec_state()
 
         self._build_layout()
         self._show_page("dashboard")
         self.after(200, self._pump_queue)
         self.after(2500, self._check_for_updates)  # quietly, in the background
         self.after(3000, self._poll_vpn)
+        self.after(4000, self.security_page.refresh)  # fills in the dashboard's score bar
         self.after(60_000, self._unload_idle_ai)
         self.after(3000, self._follow_windows_theme)
 
@@ -185,6 +188,26 @@ class App(tk.Tk):
             # Status every 3 s (picks up changes made outside Sentinel too), the IP every 30 s.
             self.vpn_page.refresh(ip=tick % 10 == 0)
         self.after(3000, self._poll_vpn, tick + 1)
+
+    def outdated_app_count(self):
+        """Apps with updates still pending, or None if that isn't known (yet)."""
+        s = self.appupd_state
+        if s["items"] is None or s["error"]:
+            return None
+        return sum(1 for u in s["items"] if s["status"].get(u.id, ("",))[0] != "done")
+
+    def update_score_bar(self):
+        checks = self.security_page.current_checks() if hasattr(self, "security_page") else None
+        if not checks or not self.score_value.winfo_exists():
+            return
+        from core import security_score
+
+        value = security_score.score(checks)
+        todo = sum(1 for c in checks if c.ok is False)
+        color = score_color(value)
+        self.score_value.configure(text=f"{value}/100", fg=color)
+        self.score_icon.configure(fg=color)
+        self.score_text.configure(text=plural("sec_todo", todo) if todo else t("score_bar_good"))
 
     def _unload_idle_ai(self):
         assistant.Assistant.unload_if_idle()  # frees ~3 GB of memory a few minutes after the last question
@@ -265,6 +288,8 @@ class App(tk.Tk):
         self.pages["firewall"] = self.firewall_page
         self.web_page = WebProtectPage(self.content, self)
         self.pages["web"] = self.web_page
+        self.security_page = SecurityPage(self.content, self)
+        self.pages["security"] = self.security_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -274,8 +299,8 @@ class App(tk.Tk):
 
     def _show_page(self, key):
         self.current_page = key
-        for k, item in self.nav.items():
-            item.set_active(k == key)
+        for k, item in self.nav.items():  # Security Check is opened from the dashboard
+            item.set_active(k == ("dashboard" if key == "security" else key))
         for frame in self.pages.values():
             frame.pack_forget()
         self.pages[key].pack(fill="both", expand=True)
@@ -289,6 +314,8 @@ class App(tk.Tk):
             self.appupd_card.check()
         elif key == "web" and not self.web_state["busy"]:
             self.web_page.refresh()
+        elif key == "security":
+            self.security_page.refresh()
 
     # ---------------------------------------------------------- dashboard --
     def _build_dashboard_page(self):
@@ -321,8 +348,21 @@ class App(tk.Tk):
         self.hero_protect_btn = ttk.Button(buttons, text=t("turn_on_protection"), style="Ghost.TButton",
                                            command=self._toggle_protection)
 
+        self.score_bar = RoundedCard(page, radius=12, padx=20, pady=10, command=lambda: self._show_page("security"))
+        self.score_bar.pack(fill="x", pady=(14, 0))
+        bar = self.score_bar.body
+        self.score_icon = icon_label(bar, "shield", 14, fg=C.TEXT_MUTED)
+        self.score_icon.pack(side="left", padx=(0, 10))
+        tk.Label(bar, text=t("score_bar_title"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
+        self.score_value = tk.Label(bar, text="", font=(C.DISPLAY, 13), fg=C.TEXT, bg=C.CARD)
+        self.score_value.pack(side="left", padx=(10, 0))
+        self.score_text = tk.Label(bar, text=t("score_bar_checking"), font=FONT, fg=C.TEXT_MUTED, bg=C.CARD)
+        self.score_text.pack(side="left", padx=(10, 0))
+        tk.Label(bar, text=t("score_bar_details") + "  ›", font=FONT, fg=C.ACCENT, bg=C.CARD).pack(side="right")
+        self.score_bar._make_clickable(lambda: self._show_page("security"), C.CARD_HOVER)
+
         cards = tk.Frame(page, bg=C.BG)
-        cards.pack(fill="x", pady=(18, 0))
+        cards.pack(fill="x", pady=(14, 0))
         for i in range(3):
             cards.columnconfigure(i, weight=1, uniform="cards")
 
@@ -1361,8 +1401,13 @@ class App(tk.Tk):
                     self.firewall_page.handle(kind, payload)
                 elif kind.startswith("appupd_"):
                     self.appupd_card.handle(kind, payload)
+                    self.update_score_bar()  # the app-update item counts toward the score
+                    if self.current_page == "security":
+                        self.security_page._render()
                 elif kind.startswith("web_"):
                     self.web_page.handle(kind, payload)
+                elif kind.startswith("sec_"):
+                    self.security_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":

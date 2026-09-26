@@ -317,6 +317,15 @@ class Ring(tk.Canvas):
         if self._spin_job is None:
             self._tick()
 
+    def show_value(self, color, text, subtext=""):
+        """Static ring with a big number in the middle (e.g. a score)."""
+        self.show(color)
+        c = self.size // 2
+        self.coords(self._text, c, c - 6)
+        self.coords(self._sub, c, c + 20)
+        self.itemconfigure(self._text, text=text, font=(C.DISPLAY, max(14, self.size // 4)), fill=C.TEXT)
+        self.itemconfigure(self._sub, text=subtext)
+
     def set_text(self, text, subtext=None):
         self.itemconfigure(self._text, text=text)
         if subtext is not None:

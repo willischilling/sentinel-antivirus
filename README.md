@@ -111,6 +111,18 @@ A control panel for the built-in **Windows Firewall**, a real kernel-level filte
 - **Scheduled scans:** set on the Scanner page (off, daily or weekly, at a chosen time). The background agent quietly scans Downloads, Desktop and Documents at a lower CPU and disk priority. A scan missed while the PC was off runs at the next sign-in. Anything found gets the usual popup, and clean scans just update "Last scan".
 - **Out-of-date apps:** out-of-date apps are one of the most common ways into a PC. The Updates tab lists every app Windows' package manager ([winget](https://learn.microsoft.com/windows/package-manager/)) knows a newer version of, using only the `winget` source, whose installers are verified by hash. Each app gets an **Update** button, and there's an **Update all**.
 
+### Security Check and password leak check
+- **Security score:** out of 100, shown on the dashboard and broken down on the Security Check page. Each item is weighted:
+  - real-time protection 20, Windows Firewall 15
+  - threat database fresh, Microsoft Defender, web protection, apps up to date: 10 each
+  - Sentinel up to date, scheduled scans, a scan in the last week, start with Windows, Windows' admin prompts (UAC): 5 each
+
+  Anything that needs attention comes first, with a **Fix** button. Items Sentinel can't check don't count against the score.
+- **Password leak check:** tells you if a password appears in a known data breach, using [Have I Been Pwned](https://haveibeenpwned.com/Passwords)' free Pwned Passwords service and its *k-anonymity* model.
+  - The password is hashed (SHA-1) on the PC, and only the first 5 characters of that hash are sent, with padding requested.
+  - The match is found locally among the hundreds of results that come back.
+  - The password is never sent, saved or logged, and the text box is cleared after each check.
+
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
 - A scanner for Downloads, Desktop, Documents or any folder, with an animated progress ring.
@@ -205,6 +217,7 @@ firewall_page.py, core/firewall.py ── Firewall: Windows Firewall modes and b
 webprotect_page.py, core/webprotect.py ── Web protection: DNS filtering (Quad9 / Cloudflare)
 app_updates_card.py, core/app_updates.py ── Out-of-date apps via winget
 core/schedule.py ── Scheduled quick scans
+security_page.py, core/security_score.py, core/pwned.py ── Security Check: score, fixes, password leak check
 theme.py ── dark and light palettes, swapped live
 ```
 
