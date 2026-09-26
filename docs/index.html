@@ -197,6 +197,38 @@ footer p { margin: 0; max-width: 70ch; }
 
 .hero .wrap > *, .split > *, .install > *, .layer > * { min-width: 0; }
 
+
+/* ask sentinel */
+.ask-grid { display: grid; grid-template-columns: .85fr 1.15fr; gap: 56px; align-items: start; }
+.ask-points { list-style: none; padding: 0; margin: 34px 0 0; }
+.ask-points li { padding: 18px 0; border-top: 1px solid var(--line); }
+.ask-points b { display: block; font-weight: 600; }
+.ask-points span { color: var(--muted); font-size: 15px; }
+.ask-meta { margin-top: 22px; font: 12.5px/1.8 "IBM Plex Mono", monospace; color: var(--muted); }
+.chat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shot-shadow); overflow: hidden; }
+.chat-tabs { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.chat-tabs button { font: 500 13px "IBM Plex Sans", sans-serif; border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+.chat-tabs button[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: var(--panel); }
+.chat-body { padding: 20px 20px 24px; min-height: 430px; display: flex; flex-direction: column; gap: 14px; }
+.msg-user { align-self: flex-end; max-width: 82%; background: var(--accent-strong); color: #fff; padding: 11px 15px; border-radius: 12px; font-size: 15px; }
+.msg-checks { align-self: flex-start; max-width: 88%; background: var(--panel); border-radius: 12px; padding: 13px 16px; font-size: 14.5px; }
+.msg-checks .head { display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 4px; }
+.msg-checks .tag { font: 600 11px "IBM Plex Mono", monospace; padding: 4px 8px; border-radius: 5px; letter-spacing: .04em; }
+.msg-checks .item { display: grid; grid-template-columns: 18px 1fr; gap: 8px; margin-top: 6px; }
+.msg-checks .item i { font-style: normal; font-weight: 700; }
+.i-bad { color: var(--bad); } .i-warn { color: var(--warn); } .i-good { color: var(--good); }
+.msg-ai { align-self: flex-start; max-width: 92%; font-size: 15px; }
+.msg-ai .who { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 14px; }
+.msg-ai .who svg { width: 15px; height: 15px; color: var(--accent); }
+.msg-ai .verdict-line { font-weight: 700; font-size: 17px; margin: 6px 0 4px; }
+.msg-ai ul { margin: 4px 0 8px; padding-left: 18px; }
+.msg-ai li { margin: 2px 0; }
+.msg-ai p { margin: 0; }
+.fade { animation: in .35s ease-out both; }
+.caret::after { content: "▍"; color: var(--muted); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (max-width: 960px) { .ask-grid { grid-template-columns: 1fr; } .chat-body { min-height: 0; } }
+
 @media (max-width: 960px) {
   .hero .wrap, .split, .install { grid-template-columns: 1fr; }
   .hero { padding-top: 56px; }
@@ -227,6 +259,7 @@ footer p { margin: 0; max-width: 70ch; }
   <nav class="wrap nav">
     <a class="brand" href="#"><img src="assets/emblem.png" alt=""><span>SENTINEL</span></a>
     <a class="link" href="#detection">Detection</a>
+    <a class="link" href="#ask">Ask Sentinel</a>
     <a class="link" href="#protection">Protection</a>
     <a class="link" href="#limits">Limits</a>
     <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
@@ -251,7 +284,7 @@ footer p { margin: 0; max-width: 70ch; }
     <div>
       <div class="kicker"><b>●</b> Windows 10 &amp; 11 · free · open source</div>
       <h1>An antivirus,<br>built from <em>scratch.</em></h1>
-      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window.</p>
+      <p class="lede">Sentinel checks files against 1.15 million known-malware fingerprints and 10,700 YARA rules, looks inside archives, and keeps a background agent watching your downloads, programs, startup entries and personal folders — even after you close the window. Got a sketchy message? Ask Sentinel checks it with an AI that runs on your own PC.</p>
       <div class="cta">
         <a class="btn primary" id="dl" href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>
@@ -304,11 +337,42 @@ footer p { margin: 0; max-width: 70ch; }
   </div>
 </section>
 
+<section id="ask">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <div class="kicker"><b>02</b> Ask Sentinel</div>
+        <h2>Not sure about a message? Ask.</h2>
+      </div>
+      <p class="lede">Paste a text, an email or a link. Built-in checks look it up instantly, then an AI that runs on your own PC explains it in plain words. No account, no API key.</p>
+    </div>
+    <div class="ask-grid">
+      <div>
+        <ul class="ask-points" style="margin-top:0">
+          <li><b>Checks first, AI second</b><span>Every link is looked up in 390,000+ known phishing domains plus the live URLhaus and OpenPhish lists, and checked for fake brand sites like <span class="mono">paypa1-secure.com</span>. The AI gets those results as facts, so it doesn't guess.</span></li>
+          <li><b>Nothing leaves your PC</b><span>The AI runs locally with llama.cpp. What you paste is never sent anywhere, and it works offline.</span></li>
+          <li><b>Catches the classics</b><span>Gift-card requests, "free Robux", fake delivery texts, fake tech support, requests for passwords or codes, and pressure to act right now.</span></li>
+          <li><b>Answers in your language</b><span>English, 简体中文, हिन्दी, Español or Français, whichever Sentinel is set to.</span></li>
+        </ul>
+        <div class="ask-meta">Qwen3 4B · Apache 2.0 · one-time 2.5 GB download, SHA-256 verified<br>Unloads after 5 idle minutes to give the memory back</div>
+      </div>
+      <div class="chat" aria-label="Example Ask Sentinel conversations">
+        <div class="chat-tabs" role="group" aria-label="Pick an example">
+          <button data-c="0" aria-pressed="true">Package text</button>
+          <button data-c="1" aria-pressed="false">Free Robux</button>
+          <button data-c="2" aria-pressed="false">Chrome download</button>
+        </div>
+        <div class="chat-body" id="chat-body" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="app">
   <div class="wrap">
     <div class="app-head">
       <div>
-        <div class="kicker"><b>02</b> The app</div>
+        <div class="kicker"><b>03</b> The app</div>
         <h2>Calm when it's quiet.<br>Loud when it matters.</h2>
       </div>
       <div class="seg" role="group" aria-label="App theme">
@@ -330,7 +394,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="protection">
   <div class="wrap">
-    <div class="kicker"><b>03</b> Real-time protection</div>
+    <div class="kicker"><b>04</b> Real-time protection</div>
     <h2>Four watchers.<br>One background agent.</h2>
     <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
 
@@ -361,7 +425,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="languages">
   <div class="wrap">
-    <div class="kicker"><b>04</b> Five languages</div>
+    <div class="kicker"><b>05</b> Five languages</div>
     <h2>Speaks your language.</h2>
     <p class="lede" style="margin-top:22px">Starts in your Windows display language and switches live — popups, tray menu, activity log, installer and uninstaller included. Dates and numbers follow local formats.</p>
     <div class="langs">
@@ -378,7 +442,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="split" style="margin-bottom:0">
       <div>
-        <div class="kicker"><b>05</b> Honest limits</div>
+        <div class="kicker"><b>06</b> Honest limits</div>
         <h2>What it can't do.</h2>
       </div>
       <p class="lede">Sentinel is a portfolio project, not a replacement for Microsoft Defender. Keep Defender on. Here's exactly where the edges are.</p>
@@ -387,6 +451,7 @@ footer p { margin: 0; max-width: 70ch; }
       <div class="limit"><h3>No blocking before launch</h3><p>That takes a Windows kernel driver. Sentinel detects and responds within about a second instead.</p></div>
       <div class="limit"><h3>Brand-new malware can slip by</h3><p>If no fingerprint, rule or heuristic covers it yet, it won't be caught. That's true of every antivirus; this one has fewer layers.</p></div>
       <div class="limit"><h3>Ransomware is caught after it starts</h3><p>It triggers after about ten files are affected, and the "likely cause" is a best guess from disk activity.</p></div>
+      <div class="limit"><h3>The AI can be wrong</h3><p>Ask Sentinel is a small AI running on a home PC. The built-in checks are facts; the AI's explanation is a helper. When in doubt, don't click.</p></div>
       <div class="limit"><h3>Admin actions need your OK</h3><p>Sentinel never stays elevated. Ending a program that runs as administrator shows the Windows admin prompt first, every time.</p></div>
     </div>
   </div>
@@ -395,7 +460,7 @@ footer p { margin: 0; max-width: 70ch; }
 <section id="install">
   <div class="wrap install">
     <div>
-      <div class="kicker"><b>06</b> Install</div>
+      <div class="kicker"><b>07</b> Install</div>
       <h2>Two minutes,<br>no admin rights.</h2>
       <ol class="steps" style="margin-top:36px">
         <li><div><b>Download SentinelSetup.exe</b><span>From the latest GitHub release. Its SHA-256 is listed in the release notes.</span></div></li>
@@ -522,6 +587,91 @@ document.getElementById("contact-copy").addEventListener("click", e => {
     setTimeout(() => e.target.textContent = "Copy", 1500);
   }).catch(() => getSelection().selectAllChildren(document.getElementById("contact-email")));
 });
+
+// ---- Ask Sentinel examples (real answers from the local AI during testing) ----
+const convos = [
+  { user: "I got this text: USPS: Your package is on hold due to an incomplete address. Update here: usps-redelivery-help.com/track",
+    tag: ["threat", "LOOKS LIKE A SCAM"],
+    checks: [["bad", "usps-redelivery-help.com uses the name USPS, but it isn't USPS's real site (usps.com)"]],
+    verdict: ["bad", "Likely a scam"],
+    bullets: ["The site usps-redelivery-help.com isn't the real USPS site.", "It's trying to trick you into updating an address."],
+    next: "Check the official USPS website directly to avoid scams." },
+  { user: "free robux!! a guy on discord said log in at roblox-free-rewards.xyz with my password",
+    tag: ["threat", "LOOKS LIKE A SCAM"],
+    checks: [["bad", "roblox-free-rewards.xyz uses the name Roblox, but it isn't Roblox's real site (roblox.com)"],
+             ["warn", "roblox-free-rewards.xyz ends in .xyz, a cheap domain ending often used by scam sites"],
+             ["bad", "Promises a prize or free stuff, a classic scam hook"],
+             ["warn", "Mentions passwords or codes. Never share these with anyone"]],
+    verdict: ["bad", "Likely a scam"],
+    bullets: ["The site isn't Roblox's real site (roblox.com)", "The domain ends in .xyz, which is often used by scammers",
+              "It promises free Robux, a common scam hook", "It asks for your password, which you should never share"],
+    next: "Don't share your password or visit the site. Check through Roblox's official website or app instead." },
+  { user: "is google.com/chrome ok to download from?",
+    tag: ["clean", "LOOKS LEGITIMATE"],
+    checks: [["good", "google.com is an official Google site"]],
+    verdict: ["good", "Looks safe"],
+    bullets: ["google.com is an official Google site", "No suspicious features or red flags found"],
+    next: "Download from google.com directly. Always check the URL to make sure it's official." },
+];
+const chatBody = document.getElementById("chat-body");
+const shieldSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6z"/></svg>';
+const icon = { bad: "!", warn: "!", good: "✓" };
+let chatRun = 0;
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function showConvo(i) {
+  const c = convos[i], id = ++chatRun, wait = reduce ? 0 : 1;
+  chatBody.innerHTML = "";
+  chatBody.appendChild(el("div", "msg-user fade", c.user));
+  setTimeout(() => {
+    if (id !== chatRun) return;
+    const card = el("div", "msg-checks fade");
+    const head = el("div", "head", "Built-in checks");
+    head.appendChild(el("span", "tag " + c.tag[0], c.tag[1]));
+    card.appendChild(head);
+    c.checks.forEach(([lvl, text]) => {
+      const row = el("div", "item");
+      row.appendChild(el("i", "i-" + lvl, icon[lvl]));
+      row.appendChild(el("span", null, text));
+      card.appendChild(row);
+    });
+    chatBody.appendChild(card);
+  }, 450 * wait);
+  setTimeout(() => {
+    if (id !== chatRun) return;
+    const ai = el("div", "msg-ai fade");
+    const who = el("div", "who"); who.innerHTML = shieldSvg; who.appendChild(el("span", null, "Ask Sentinel"));
+    ai.appendChild(who);
+    const verdict = el("div", "verdict-line i-" + c.verdict[0]);
+    const list = el("ul"), next = el("p");
+    ai.append(verdict, list, next);
+    chatBody.appendChild(ai);
+    // Stream it in word by word, like the app does.
+    const parts = [[verdict, c.verdict[1]], ...c.bullets.map(b => [null, b]), [next, c.next]];
+    let p = 0;
+    (function step() {
+      if (id !== chatRun || p >= parts.length) return;
+      let [target, text] = parts[p++];
+      if (!target) { target = el("li"); list.appendChild(target); }
+      const words = text.split(" ");
+      let w = 0;
+      target.classList.add("caret");
+      (function word() {
+        if (id !== chatRun) return;
+        target.textContent = words.slice(0, ++w).join(" ");
+        if (w < words.length && wait) return setTimeout(word, 45);
+        if (!wait) target.textContent = text;
+        target.classList.remove("caret");
+        setTimeout(step, 60 * wait);
+      })();
+    })();
+  }, 1100 * wait);
+}
+document.querySelectorAll("[data-c]").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-c]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  showConvo(+b.dataset.c);
+}));
+new IntersectionObserver((e, o) => { if (e[0].isIntersecting) { showConvo(0); o.disconnect(); } }, { threshold: .3 })
+  .observe(chatBody);
 
 // ---- latest release details from GitHub ----
 fetch("https://api.github.com/repos/willischilling/sentinel-antivirus/releases/latest")
