@@ -50,6 +50,8 @@ This runs as a separate background process (`Sentinel.exe --agent`), so it keeps
 
 Nothing is ended or deleted without a click.
 
+**Programs running as administrator.** If Windows blocks an action (ending a program that runs as administrator or SYSTEM, moving a file out of Program Files, removing an all-users startup entry or task), Sentinel shows the normal Windows admin prompt. After you click Yes, a one-shot `Sentinel.exe --elevated` process does just that action and exits. Sentinel never stays elevated. It's installed in your user folder, so a permanently elevated Sentinel would let any program that replaced its files gain admin rights. Before ending a program, the elevated step checks that the process ID still belongs to the same file.
+
 **Ransomware alerts** name the program most likely responsible: the process writing the most to disk right now. The alert says "Cause" instead of "Likely cause" when that process also has files open in the affected folder.
 
 **Threat database updates.** The fingerprint list and YARA rules update automatically every 6 hours. The first download is about 45 MB; later updates take a few seconds.
@@ -171,7 +173,7 @@ Measured results:
 - **Ransomware detection reacts after the fact.** It triggers after about 10 files are affected. The "likely cause" is a best guess based on disk activity, so check the name before ending a program. Bait files and automatic pausing of suspects were designed but left out because they couldn't be properly tested.
 - **Download protection watches one folder** (Downloads by default).
 - **Archive limits:** archives larger than 256 MB unpacked, and encrypted archive contents, can't be scanned inside.
-- **Runs as the current user.** It can't end programs running as administrator, or remove all-users startup entries, without elevation.
+- **Admin actions need your approval each time.** Sentinel runs as you, not as administrator. Ending a program that runs as administrator, or removing an all-users startup entry, shows the Windows admin prompt first. Core Windows processes (csrss, winlogon, lsass...) are never ended.
 
 ## Credits
 

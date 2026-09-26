@@ -15,7 +15,8 @@ import psutil
 import launcher
 import single_instance
 from core import (
-    activity, authenticode, database, i18n, paths, quarantine, scanner, settings, signatures, threat_intel,
+    activity, authenticode, database, elevate, i18n, paths, quarantine, scanner, settings, signatures,
+    threat_intel,
 )
 from core.i18n import number, t
 from gui import clip, configure_style, default_watch_path
@@ -226,7 +227,10 @@ class Agent(tk.Tk):
             return t("msg_moved_quarantine")
 
         def do_delete():
-            path.unlink()
+            try:
+                path.unlink()
+            except PermissionError:
+                elevate.run("delete", path)
             database.log_scan(path_key, "deleted", reason)
             activity.log(t("log_deleted", path=path), "muted")
             return t("msg_file_deleted")
@@ -255,7 +259,7 @@ class Agent(tk.Tk):
         exe = Path(alert.exe_path)
 
         def end_process():
-            if not process_watcher.kill_process(alert.pid):
+            if not process_watcher.kill_process(alert.pid, alert.exe_path):
                 raise RuntimeError(t("err_admin_blocked"))
             activity.log(t("log_ended", pid=alert.pid, name=alert.name), "muted")
             return t("msg_program_ended")
@@ -328,7 +332,7 @@ class Agent(tk.Tk):
             if program:
                 for proc in psutil.process_iter(["pid", "exe"]):
                     if proc.info.get("exe") and Path(proc.info["exe"]) == program:
-                        process_watcher.kill_process(proc.pid)
+                        process_watcher.kill_process(proc.pid, proc.info["exe"])
                 dest = quarantine.quarantine_file(program, result.signature_name)
                 activity.log(t("log_quarantined", path=program, dest=dest.name), "muted")
             return t("msg_removed_quarantined")
@@ -358,7 +362,7 @@ class Agent(tk.Tk):
                 detail = t("ransom_signed", detail=detail, publisher=publisher)
 
             def end_program():
-                if not process_watcher.kill_process(alert.suspect_pid):
+                if not process_watcher.kill_process(alert.suspect_pid, alert.suspect_exe):
                     raise RuntimeError(t("err_admin_blocked"))
                 activity.log(t("log_ended", pid=alert.suspect_pid, name=alert.suspect_name), "muted")
                 return t("msg_program_ended")

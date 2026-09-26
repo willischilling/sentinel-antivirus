@@ -203,16 +203,20 @@ def remove(entry: StartupEntry):
         try:
             with winreg.OpenKey(entry.hive, entry.key, 0, winreg.KEY_SET_VALUE | winreg.KEY_WOW64_64KEY) as k:
                 winreg.DeleteValue(k, entry.name)
-        except PermissionError:
-            raise RuntimeError("needs administrator rights (it's an all-users entry)")
+        except PermissionError:  # an all-users entry: ask for admin approval
+            from core import elevate
+
+            elevate.run("regdel", entry.key, entry.name)
     elif entry.kind == "task":
         result = subprocess.run(["schtasks", "/delete", "/tn", entry.name, "/f"], capture_output=True,
                                 creationflags=CREATE_NO_WINDOW)
         if result.returncode != 0:
             message = (result.stderr or result.stdout).decode("mbcs", "replace").strip()
-            if "denied" in message.lower():
-                raise RuntimeError("needs administrator rights to delete this task")
-            raise RuntimeError(message or "schtasks couldn't delete the task")
+            if "denied" not in message.lower():
+                raise RuntimeError(message or "schtasks couldn't delete the task")
+            from core import elevate
+
+            elevate.run("taskdel", entry.name)
     else:
         from core import quarantine
         quarantine.quarantine_file(entry.file, f"Startup entry: {entry.name}")

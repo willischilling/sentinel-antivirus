@@ -1,8 +1,10 @@
 """Bottom-right popup notifications, drawn by the app just above the taskbar."""
 import sys
+import threading
 import tkinter as tk
 from tkinter import ttk
 
+from core import elevate
 from core.i18n import t
 import theme as C
 from theme import FONT_BOLD, FONT_SMALL
@@ -76,25 +78,48 @@ class Toast(tk.Toplevel):
                                wraplength=wrap, justify="left", anchor="w")
 
     def _run_action(self, callback, label):
-        """callback returns a status message to show, or None to just close."""
-        try:
-            message = callback()
-        except Exception as e:
+        """callback returns a status message to show, or None to just close. It runs on a
+        worker thread (it may wait on the Windows admin prompt), so it must not touch Tk."""
+        for btn in self.buttons.values():
+            btn.state(["disabled"])
+        outcome = {}
+
+        def work():
+            try:
+                outcome["message"] = callback()
+            except Exception as e:
+                outcome["error"] = e
+
+        worker = threading.Thread(target=work, daemon=True)
+        worker.start()
+        self._await_action(worker, outcome, label, waited=False)
+
+    def _await_action(self, worker, outcome, label, waited):
+        if not self.winfo_exists():
+            return
+        if worker.is_alive():
+            if elevate.waiting and not waited:  # the Windows admin prompt is up
+                self._show_status(t("toast_working"), C.TEXT_MUTED, close_after_ms=None)
+                waited = 1
+            self.after(100, self._await_action, worker, outcome, label, waited)
+            return
+        if "error" in outcome:
+            e = outcome["error"]
             if self.on_error:
                 self.on_error(label, e)
             self._show_status(t("toast_failed", action=label, error=e), C.BAD, close_after_ms=8000)
-            return
-        if message is None:
+        elif outcome.get("message") is None:
             self.dismiss()
         else:
-            self._show_status(message, C.TEXT, close_after_ms=2500)
+            self._show_status(outcome["message"], C.TEXT, close_after_ms=2500)
 
     def _show_status(self, message, color, close_after_ms):
         self.button_row.pack_forget()
         self.status.configure(text=message, fg=color)
         self.status.pack(fill="x", pady=(12, 0))
         self.manager.reflow()
-        self.after(close_after_ms, self.dismiss)
+        if close_after_ms:
+            self.after(close_after_ms, self.dismiss)
 
     def fade_in(self, alpha=0.0):
         alpha = min(alpha + 0.12, 1.0)

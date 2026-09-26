@@ -98,8 +98,10 @@ def monitor_loop(interval_seconds: float, on_alert, stop_flag: list[bool],
         time.sleep(interval_seconds)
 
 
-def kill_process(pid: int) -> bool:
-    """True once the process is gone (including if it had already exited)."""
+def kill_process(pid: int, exe: str | None = None) -> bool:
+    """True once the process is gone (including if it had already exited). If Windows
+    denies access (it runs as administrator) and exe is given, asks for admin approval
+    and ends it that way; raises RuntimeError if that's declined or fails."""
     try:
         proc = psutil.Process(pid)
         proc.terminate()
@@ -107,5 +109,12 @@ def kill_process(pid: int) -> bool:
         return True
     except psutil.NoSuchProcess:
         return True
-    except (psutil.TimeoutExpired, psutil.AccessDenied):
+    except psutil.TimeoutExpired:
         return False
+    except psutil.AccessDenied:
+        if not exe:
+            return False
+    from core import elevate
+
+    elevate.run("kill", pid, exe)
+    return True

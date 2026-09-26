@@ -568,7 +568,7 @@ class App(tk.Tk):
                 self.scan_tree.set(item_id, "verdict", t("verdict_quarantined"))
                 self.scan_tree.item(item_id, tags=("skipped",))
                 count += 1
-            except OSError as e:
+            except (OSError, RuntimeError) as e:  # RuntimeError: admin approval declined or failed
                 messagebox.showerror("Sentinel", t("quarantine_failed", path=result.path, error=e))
         if count:
             self._refresh_dashboard()
@@ -821,7 +821,11 @@ class App(tk.Tk):
         sel = self.q_tree.selection()
         if not sel:
             return
-        result = quarantine.restore_file(int(sel[0]))
+        try:
+            result = quarantine.restore_file(int(sel[0]))
+        except (OSError, RuntimeError) as e:  # e.g. admin approval declined
+            messagebox.showerror("Sentinel", f"{t('restore_failed')}\n\n{e}")
+            return
         if result:
             messagebox.showinfo("Sentinel", t("restored_to", path=result))
             self._refresh_quarantine()
@@ -1165,6 +1169,10 @@ class App(tk.Tk):
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--elevated":  # one admin action, then exit
+        from core import elevate
+
+        sys.exit(elevate.main(sys.argv[2:]))
     if "--agent" in sys.argv:
         import agent
 
