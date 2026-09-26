@@ -150,6 +150,11 @@ class SetupWizard(tk.Tk):
         src = payload_dir()
         app_src = src / "app"
         if not (app_src / APP_EXE_NAME).is_file() or not (src / UNINSTALL_EXE_NAME).is_file():
+            if not getattr(sys, "frozen", False):
+                raise RuntimeError(
+                    "This is the installer's source code, not the installer itself, so it has no "
+                    "app files to install.\n\nRun SentinelSetup.exe instead (it's in the main folder "
+                    "of the download), or build it first with build_installer.ps1.")
             raise RuntimeError("This installer is incomplete or damaged (the app files are missing). "
                                "Please download it again.")
 

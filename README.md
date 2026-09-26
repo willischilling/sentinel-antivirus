@@ -66,7 +66,11 @@ Nothing is ended or deleted without a click.
 ## Getting started
 
 ### Download
-Get **SentinelSetup.exe** from the [latest release](https://github.com/willischilling/sentinel-antivirus/releases/latest). The installer isn't code-signed, so Windows SmartScreen will warn you: click **More info → Run anyway**. The release notes include a SHA-256 checksum for verifying the download.
+Run **[SentinelSetup.exe](SentinelSetup.exe)**. It's in the main folder of this repo, so it's also included if you use **Code → Download ZIP**. You can also get it from the [latest release](https://github.com/willischilling/sentinel-antivirus/releases/latest), whose notes include a SHA-256 checksum for verifying the download.
+
+The installer isn't code-signed, so Windows SmartScreen will warn you: click **More info → Run anyway**.
+
+`installer/installer.py` is the installer's *source code*. Running it directly won't install anything, because the app files are only packed in when `SentinelSetup.exe` is built.
 
 ### Requirements
 - Windows 10 or 11. Scanning 7-Zip and RAR needs a recent Windows 11 `tar.exe`; everything else works on Windows 10.
@@ -90,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File build_installer.ps1
 This produces:
 - `dist\Sentinel\`: the app, built with `--onedir` so it starts quickly
 - `dist\Uninstall.exe`
-- `dist\SentinelSetup.exe`: the installer, which bundles the other two
+- `dist\SentinelSetup.exe`: the installer, which bundles the other two. It's also copied to the repo root.
 
 ### Command line
 There's also a basic CLI (`cli.py`) that uses the same scanning engine:

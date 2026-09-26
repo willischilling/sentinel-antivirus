@@ -35,5 +35,8 @@ python -m PyInstaller --noconfirm --onefile --windowed --name SentinelSetup `
     --distpath "$root\dist" --workpath "$root\build" --specpath "$root\build" `
     "$root\installer\installer.py"
 
+# Keep a copy in the repo root so it's downloadable straight from the GitHub page.
+Copy-Item "$root\dist\SentinelSetup.exe" "$root\SentinelSetup.exe" -Force
+
 Write-Host ""
-Write-Host "Done. Installer at: $root\dist\SentinelSetup.exe" -ForegroundColor Green
+Write-Host "Done. Installer at: $root\dist\SentinelSetup.exe (copied to $root\SentinelSetup.exe)" -ForegroundColor Green
