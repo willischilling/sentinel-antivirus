@@ -2,6 +2,7 @@
 and the switch for real-time protection. Protection itself runs in a separate
 background agent process (agent.py) so it survives this window closing.
 """
+import os
 import queue
 import re
 import sys
@@ -80,6 +81,23 @@ def configure_style(root: tk.Tk):
     style.configure("TEntry", fieldbackground=C.CARD, foreground=C.TEXT, insertcolor=C.TEXT, borderwidth=1)
     style.configure("Horizontal.TProgressbar", background=C.ACCENT, troughcolor=C.BORDER, borderwidth=0,
                     bordercolor=C.BORDER, lightcolor=C.ACCENT, darkcolor=C.ACCENT, thickness=8)
+
+
+ALL_DRIVES = "::all-drives"
+
+
+def scan_roots(choice: str) -> list[str]:
+    """The folders a scan covers: one folder, or every local drive for "All drives"."""
+    if choice != ALL_DRIVES:
+        return [choice]
+    import psutil
+
+    roots = []
+    for part in psutil.disk_partitions(all=False):
+        if "cdrom" in part.opts or not part.fstype:
+            continue
+        roots.append(part.mountpoint)
+    return roots or [os.environ.get("SystemDrive", "C:") + "\\"]
 
 
 def default_watch_path() -> str:
@@ -229,7 +247,7 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------- layout --
     def _build_layout(self):
-        sidebar = tk.Frame(self, bg=C.PANEL, width=232)
+        sidebar = tk.Frame(self, bg=C.PANEL, width=244)
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
@@ -532,16 +550,20 @@ class App(tk.Tk):
         chips.pack(anchor="w", pady=(12, 8))
         self.scan_target = tk.StringVar(value=default_watch_path())
         self._chips = {}
-        for key, label in (("downloads", "folder_downloads"), ("desktop", "folder_desktop"),
-                           ("documents", "folder_documents")):
-            folder = str(paths.known_folder(key))
-            chip = RoundedCard(chips, bg=C.BORDER, outer=C.CARD, radius=8, padx=14, pady=7,
-                               hover_bg=C.CARD_HOVER, command=lambda f=folder: self._pick_target(f))
-            chip.label = tk.Label(chip.body, text=t(label), font=FONT, fg=C.TEXT, bg=C.BORDER)
+        targets = [(str(paths.known_folder(key)), t(label)) for key, label in (
+            ("downloads", "folder_downloads"), ("desktop", "folder_desktop"), ("documents", "folder_documents"))]
+        targets.append((ALL_DRIVES, t("folder_all")))
+        chips2 = tk.Frame(right, bg=C.CARD)  # second row: the whole PC, or any folder
+        chips2.pack(anchor="w", pady=(0, 8), after=chips)
+        for folder, label in targets:
+            chip = RoundedCard(chips2 if folder == ALL_DRIVES else chips, bg=C.BORDER, outer=C.CARD, radius=8,
+                               padx=11, pady=7, hover_bg=C.CARD_HOVER,
+                               command=lambda f=folder: self._pick_target(f))
+            chip.label = tk.Label(chip.body, text=label, font=FONT, fg=C.TEXT, bg=C.BORDER)
             chip.label.pack()
-            chip.pack(side="left", padx=(0, 8))
+            chip.pack(side="left", padx=(0, 6))
             self._chips[folder] = chip
-        other = RoundedCard(chips, bg=C.BORDER, outer=C.CARD, radius=8, padx=14, pady=7,
+        other = RoundedCard(chips2, bg=C.BORDER, outer=C.CARD, radius=8, padx=11, pady=7,
                             hover_bg=C.CARD_HOVER, command=self._browse_scan_path)
         tk.Label(other.body, text=t("choose_folder"), font=FONT, fg=C.TEXT, bg=C.BORDER).pack()
         other.pack(side="left")
@@ -552,6 +574,8 @@ class App(tk.Tk):
         action.pack(anchor="w")
         self.scan_btn = ttk.Button(action, text=t("scan_now"), style="Hero.TButton", command=self._start_scan)
         self.scan_btn.pack(side="left")
+        self.stop_btn = ttk.Button(action, text=t("scan_stop"), style="Danger.TButton", command=self._stop_scan)
+        self._scan_stop = threading.Event()
         self.scan_status = tk.Label(action, text="", font=FONT, fg=C.TEXT_MUTED, bg=C.CARD)
         self.scan_status.pack(side="left", padx=(16, 0))
         self._pick_target(self.scan_target.get())
@@ -650,7 +674,10 @@ class App(tk.Tk):
             selected = path == folder
             chip.set_rest(C.ACCENT_DARK if selected else C.BORDER)
             chip.label.configure(fg=C.ON_ACCENT if selected else C.TEXT)
-        self.scan_target_label.configure(text=shorten(folder, 80))
+        if folder == ALL_DRIVES:
+            self.scan_target_label.configure(text=t("all_drives_desc", drives=", ".join(scan_roots(folder))))
+        else:
+            self.scan_target_label.configure(text=shorten(folder, 80))
 
     def _browse_scan_path(self):
         path = filedialog.askdirectory(initialdir=self.scan_target.get() or str(Path.home()))
@@ -663,8 +690,9 @@ class App(tk.Tk):
         self._start_scan()
 
     def _start_scan(self):
-        target = Path(self.scan_target.get())
-        if not target.exists():
+        choice = self.scan_target.get()
+        target = Path(choice) if choice != ALL_DRIVES else None
+        if target is not None and not target.exists():
             messagebox.showerror("Sentinel", t("folder_missing", path=target))
             return
         self._scanning = True
@@ -674,25 +702,39 @@ class App(tk.Tk):
         self._scan_result_map.clear()
         self.scan_empty.hide()
         self.scan_btn.configure(state="disabled", text=t("scanning_btn"))
+        self._scan_stop.clear()
+        self.stop_btn.configure(state="normal", text=t("scan_stop"))
+        self.stop_btn.pack(side="left", padx=(10, 0), after=self.scan_btn)
         self.scan_ring.spin("0", t("files_checked"))
-        self.scan_status.configure(text=t("scanning_folder", name=target.name or target), fg=C.TEXT_MUTED)
-        threading.Thread(target=self._scan_worker, args=(target,), daemon=True).start()
+        name = t("folder_all") if target is None else (target.name or target)
+        self.scan_status.configure(text=t("scanning_folder", name=name), fg=C.TEXT_MUTED)
+        threading.Thread(target=self._scan_worker, args=(choice,), daemon=True).start()
 
-    def _scan_worker(self, target: Path):
+    def _stop_scan(self):
+        self._scan_stop.set()  # the worker checks this between files
+        self.stop_btn.configure(state="disabled", text=t("scan_stopping"))
+
+    def _scan_worker(self, choice: str):
         total = flagged = 0
         counts = {"signature_match": 0, "suspicious": 0, "error": 0}
-        for result in scanner.scan_directory(target, recursive=True):
-            total += 1
-            if result.verdict in counts:
-                counts[result.verdict] += 1
-            if result.verdict in ("signature_match", "suspicious"):
-                flagged += 1
-                self.event_queue.put(("scan_result", result))
-            elif result.verdict == "error":
-                self.event_queue.put(("scan_result", result))
-            if total % 25 == 0:
-                self.event_queue.put(("scan_progress", (total, flagged)))
-        self.event_queue.put(("scan_done", (target, total, flagged, counts)))
+        full = choice == ALL_DRIVES
+        for root in scan_roots(choice):
+            for result in scanner.scan_directory(Path(root), recursive=True):
+                if self._scan_stop.is_set():
+                    break
+                total += 1
+                if result.verdict in counts:
+                    counts[result.verdict] += 1
+                if result.verdict in ("signature_match", "suspicious"):
+                    flagged += 1
+                    self.event_queue.put(("scan_result", result))
+                elif result.verdict == "error" and not full:  # a whole-PC scan hits thousands of locked files
+                    self.event_queue.put(("scan_result", result))
+                if total % 25 == 0:
+                    self.event_queue.put(("scan_progress", (total, flagged)))
+            if self._scan_stop.is_set():
+                break
+        self.event_queue.put(("scan_done", (choice, total, flagged, counts, self._scan_stop.is_set())))
 
     def _on_scan_result(self, result):
         if result.verdict == "signature_match":
@@ -713,7 +755,9 @@ class App(tk.Tk):
             text=t("flagged_so_far", n=number(flagged)) if flagged else t("nothing_flagged_so_far"))
 
     def _on_scan_done(self, payload):
-        target, total, flagged, counts = payload
+        choice, total, flagged, counts, stopped = payload
+        target = Path(choice) if choice != ALL_DRIVES else Path(t("folder_all"))
+        self.stop_btn.pack_forget()
         self._scanning = False
         self.scan_btn.configure(state="normal", text=t("scan_now"))
         if flagged:
@@ -729,10 +773,12 @@ class App(tk.Tk):
                                  "files": total, "flagged": flagged, "path": str(target)})
         self.settings = settings.load()
         self._refresh_dashboard()
-        self._show_scan_summary(target, total, counts)
+        if stopped:
+            self.scan_status.configure(text=t("scan_stopped_status", files=number(total)), fg=C.WARN)
+        self._show_scan_summary(target, total, counts, stopped)
 
     # ------------------------------------------------------ scan summary --
-    def _show_scan_summary(self, target: Path, total: int, counts: dict):
+    def _show_scan_summary(self, target: Path, total: int, counts: dict, stopped: bool = False):
         """A summary card over the scanner page, shown when a scan finishes."""
         self._close_scan_summary()
         finished = datetime.now().astimezone()
@@ -754,7 +800,8 @@ class App(tk.Tk):
             ring.show(C.WARN, glyph="warning")
         else:
             ring.show(C.GOOD, glyph="check")
-        tk.Label(body, text=t("summary_title"), font=FONT_TITLE, fg=C.TEXT, bg=C.CARD).pack(pady=(10, 0))
+        tk.Label(body, text=t("summary_stopped") if stopped else t("summary_title"), font=FONT_TITLE,
+                 fg=C.TEXT, bg=C.CARD).pack(pady=(10, 0))
         tk.Label(body, text=relative(finished), font=FONT, fg=C.TEXT_MUTED, bg=C.CARD).pack(pady=(2, 10))
 
         def divider():
@@ -906,8 +953,10 @@ class App(tk.Tk):
         col = tk.Frame(row, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
         tk.Label(col, text=t("layer_usb"), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
-        tk.Label(col, text=t("layer_usb_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, justify="left",
-                 anchor="w").pack(anchor="w", fill="x")
+        desc = tk.Label(col, text=t("layer_usb_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, justify="left",
+                        anchor="w")
+        desc.pack(anchor="w", fill="x")
+        col.bind("<Configure>", lambda e: desc.configure(wraplength=max(120, e.width - 4)))
 
     def _set_usb_mode(self, mode):
         settings.save(usb_mode=mode)  # the background agent reads it when a drive is plugged in

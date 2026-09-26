@@ -87,6 +87,30 @@ def lookup_signature(file_hash: str) -> str | None:
         return None
 
 
+def lookup_signatures(file_hashes) -> dict[str, str]:
+    """lookup_signature() for many hashes at once, over one connection (e.g. every file in an
+    archive). Returns {hash: threat name} for the ones that are known."""
+    hashes = list({h.lower() for h in file_hashes})
+    found = {}
+    with connect() as conn:
+        for i in range(0, len(hashes), 500):
+            chunk = hashes[i:i + 500]
+            marks = ",".join("?" * len(chunk))
+            for h, name in conn.execute(f"SELECT hash, name FROM signatures WHERE hash IN ({marks})", chunk):
+                found[h] = name
+            blobs = [bytes.fromhex(h) for h in chunk if h not in found]
+            if not blobs:
+                continue
+            marks = ",".join("?" * len(blobs))
+            for blob, family in conn.execute(
+                    f"SELECT sha256, family FROM malware_hashes WHERE sha256 IN ({marks})", blobs):
+                if family and family.endswith("(ThreatFox)"):
+                    found[blob.hex()] = family
+                else:
+                    found[blob.hex()] = f"{family} (MalwareBazaar)" if family else "Known malware (MalwareBazaar)"
+    return found
+
+
 def add_feed_hashes(rows, replace_family: bool = False) -> int:
     """rows: iterable of (sha256_hex, family_or_None). Returns rows written."""
     if replace_family:

@@ -21,7 +21,8 @@ Every file goes through these layers, strongest first:
    - [MalwareBazaar](https://bazaar.abuse.ch/): the full history of over 1.1 million samples, plus a rolling feed of the last 48 hours with malware family names (for example "Mirai (MalwareBazaar)").
    - [ThreatFox](https://threatfox.abuse.ch/): payloads seen in active attack campaigns (AsyncRAT, RedLine, Akira ransomware, fake browser updates...). Only entries rated 75% confidence or higher are used, which adds about 7,000 fingerprints MalwareBazaar doesn't have.
 2. **YARA rules.** The [YARA Forge](https://github.com/YARAHQ/yara-forge) "extended" rule set (about 10,700 curated rules; tested with no false alarms on 2,196 Windows, Program Files and Downloads files), which detects whole malware families rather than single files. Rules with a score of 70 or more count as a threat; lower scores count as suspicious.
-3. **Archive contents.** Low-score YARA hits on the archive file itself are ignored, since those rules would be matching compressed bytes; the files inside are what get checked.
+   Large files (over 2 MB) only get the YARA pass if they're programs, scripts, or start like an archive, Office file or PDF. Logs, game data and fonts still get the fingerprint check.
+3. **Archive contents.** Files inside an archive have their fingerprints checked in batches, and ordinary data files (like the thousands of `.class` files in a Java `.jar`) are YARA-scanned together, so large archives take a fraction of a second instead of several. Low-score YARA hits on the archive file itself are ignored, since those rules would be matching compressed bytes; the files inside are what get checked.
    ZIP and JAR are read in memory. 7-Zip, RAR, TAR, CAB and ISO files are listed and extracted with Windows' own Microsoft-signed `tar.exe` (libarchive), so no third-party tools are bundled. Archives inside archives are followed up to two levels deep, across formats.
 4. **Heuristics.** Suspicious strings (encoded PowerShell, process-injection APIs, shadow copy deletion...), double extensions like `invoice.pdf.exe`, and obfuscated scripts. The string checks only apply to files that can actually run (programs, scripts, shortcuts, macro-enabled Office files). A log or document that merely *mentions* `powershell -enc` is harmless.
 
@@ -130,7 +131,7 @@ A control panel for the built-in **Windows Firewall**, a real kernel-level filte
 
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
-- A scanner for Downloads, Desktop, Documents or any folder, with an animated progress ring.
+- A scanner for Downloads, Desktop, Documents, **all drives** or any folder, with an animated progress ring and a **Stop** button. A stopped scan keeps what it found.
 - Quarantine: files are moved to an isolated folder and renamed so they can't run, and can be restored or permanently deleted.
 - Detection history.
 - A system tray icon, and an option to start with Windows.

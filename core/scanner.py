@@ -33,6 +33,25 @@ class ScanResult:
     publisher: str | None = None  # set when a valid signature cleared weak signals
 
 
+# Large files only get the (slower) YARA pass if they could run or carry something that can:
+# programs, scripts, archives, Office documents, PDFs. Big logs, game data, fonts and the like
+# still get the fingerprint check, which catches known malware whatever its name.
+YARA_SMALL = 2 * 1024 * 1024
+RISKY_MAGIC = (b"MZ", b"\x7fELF", b"PK", b"Rar!", b"7z\xbc\xaf", b"\xd0\xcf\x11\xe0", b"%PDF", b"{\\rtf", b"#!",
+               b"MSCF", b"\x1f\x8b")
+
+
+def worth_yara(path: Path, size: int) -> bool:
+    if size <= YARA_SMALL or path.suffix.lower() in heuristics.RUNNABLE_EXTS:
+        return True
+    try:
+        with open(path, "rb") as f:
+            head = f.read(8)
+    except OSError:
+        return True
+    return head.startswith(RISKY_MAGIC)
+
+
 def scan_file(path: Path) -> ScanResult:
     if is_own_file(path):
         return ScanResult(path, "clean")
@@ -47,7 +66,7 @@ def scan_file(path: Path) -> ScanResult:
             database.log_scan(str(path), result.verdict, sig_name or "")
             return result
 
-        yara_hits = yara_engine.match(path, size)
+        yara_hits = yara_engine.match(path, size) if worth_yara(path, size) else []
         strong = [h for h in yara_hits if h.score >= yara_engine.THREAT_SCORE]
         if strong:
             name = f"YARA: {strong[0].rule}"

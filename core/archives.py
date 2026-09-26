@@ -88,6 +88,7 @@ def _scan_path(path: Path, prefix: str, depth: int, report: ArchiveReport, budge
 
 # ------------------------------------------------------------------- ZIP --
 def _scan_zip(zf: zipfile.ZipFile, prefix: str, depth: int, report: ArchiveReport, budget: list):
+    batch = _Batch(report)
     for info in zf.infolist():
         if info.is_dir():
             continue
@@ -113,9 +114,10 @@ def _scan_zip(zf: zipfile.ZipFile, prefix: str, depth: int, report: ArchiveRepor
             report.notes.append(f"{name}: couldn't be read ({e})")
             continue
         budget[0] -= len(data)
-        _scan_member(name, data, report)
+        batch.add(name, data)
         if depth < MAX_DEPTH:
             _scan_nested_bytes(info.filename, name, data, depth, report, budget)
+    batch.flush()
 
 
 def _scan_nested_bytes(filename: str, name: str, data: bytes, depth: int, report, budget):
@@ -197,6 +199,7 @@ def _scan_libarchive(path: Path, prefix: str, depth: int, report: ArchiveReport,
             if name in encrypted:
                 _encrypted_member(prefix + name, report)
 
+        batch = _Batch(report)
         for root, dirs, files in os.walk(tmpdir, followlinks=False):
             for file in files:
                 full = Path(root) / file
@@ -205,6 +208,7 @@ def _scan_libarchive(path: Path, prefix: str, depth: int, report: ArchiveReport,
                     continue
                 if budget[1] <= 0:
                     report.notes.append("Stopped early: too many files in archive")
+                    batch.flush()
                     return
                 budget[1] -= 1
                 try:
@@ -217,9 +221,10 @@ def _scan_libarchive(path: Path, prefix: str, depth: int, report: ArchiveReport,
                     report.notes.append(f"{prefix}{rel}: couldn't be read ({e.strerror})")
                     continue
                 budget[0] -= len(data)
-                _scan_member(prefix + rel, data, report)
+                batch.add(prefix + rel, data)
                 if depth < MAX_DEPTH:
                     _scan_nested_bytes(rel, prefix + rel, data, depth, report, budget)
+        batch.flush()
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -232,11 +237,62 @@ def _encrypted_member(name: str, report: ArchiveReport):
         report.notes.append(f"{name}: encrypted, couldn't be scanned")
 
 
-def _scan_member(name: str, data: bytes, report: ArchiveReport):
-    known = database.lookup_signature(hashlib.sha256(data).hexdigest())
-    if known:
-        report.threats.append(f"{name}: {known}")
-        return
+# Files inside archives that get their own YARA pass. Everything else (Java classes,
+# images, text, data...) is still checked, but in large combined chunks: a JAR can hold
+# thousands of small files, and one YARA call per file made those take seconds each.
+OWN_YARA_SUFFIXES = RUNNABLE_SUFFIXES | {".zip", ".7z", ".rar", ".iso", ".cab", ".tar", ".gz", ".lnk", ".hta",
+                                         ".doc", ".docm", ".xls", ".xlsm", ".ppt", ".pptm", ".rtf", ".pdf", ""}
+BATCH_FILES = 400
+BATCH_BYTES = 16 * 1024 * 1024
+
+
+class _Batch:
+    """Collects files from an archive and checks them together: one database query for all
+    their fingerprints, and combined YARA runs for the ordinary ones."""
+
+    def __init__(self, report: ArchiveReport):
+        self.report, self.items, self.size = report, [], 0
+
+    def add(self, name: str, data: bytes):
+        self.items.append((name, data))
+        self.size += len(data)
+        if len(self.items) >= BATCH_FILES or self.size >= BATCH_BYTES:
+            self.flush()
+
+    def flush(self):
+        items, self.items, self.size = self.items, [], 0
+        if not items:
+            return
+        report = self.report
+        hashes = [hashlib.sha256(data).hexdigest() for _, data in items]
+        known = database.lookup_signatures(hashes)
+        combined, combined_names = [], []
+        for (name, data), digest in zip(items, hashes):
+            if digest in known:
+                report.threats.append(f"{name}: {known[digest]}")
+            elif Path(name).suffix.lower() in OWN_YARA_SUFFIXES:
+                _scan_member(name, data, report, skip_hash=True)
+            else:
+                combined.append(data)
+                combined_names.append(name)
+                flags = heuristics.check_bytes(name, data)
+                if flags and not _signed(name, data):
+                    report.suspicious.extend(f"{name}: {flag}" for flag in flags)
+        if combined:
+            hits = yara_engine.match_data("combined.bin", b"\n".join(combined))
+            strong = [h for h in hits if h.score >= yara_engine.THREAT_SCORE]
+            where = combined_names[0] if len(combined_names) == 1 else f"{combined_names[0]} (+{len(combined_names) - 1})"
+            if strong:
+                report.threats.append(f"{where}: YARA {strong[0].rule}")
+            report.suspicious.extend(f"{where}: YARA rule matched: {h.rule}" for h in hits if h not in strong)
+
+
+def _scan_member(name: str, data: bytes, report: ArchiveReport, skip_hash: bool = False):
+    if not skip_hash:
+        known = database.lookup_signature(hashlib.sha256(data).hexdigest())
+        if known:
+            report.threats.append(f"{name}: {known}")
+            return
     hits = yara_engine.match_data(name, data)
     strong = [h for h in hits if h.score >= yara_engine.THREAT_SCORE]
     if strong:
