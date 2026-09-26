@@ -13,6 +13,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import theme as C
+from core import apps as apps_module
 from core import firewall
 from core.i18n import t
 from theme import FONT, FONT_BOLD, FONT_LARGE, FONT_SMALL
@@ -50,6 +51,9 @@ class FirewallPage(tk.Frame):
 
     def _render(self):
         tab = self.state["tab"]
+        canvas = getattr(self, "list_canvas", None)
+        if canvas is not None and canvas.winfo_exists():
+            self.state["scroll"] = canvas.yview()[0]
         for key, lbl in self.tab_labels.items():
             lbl.configure(fg=C.ACCENT if key == tab else C.TEXT_MUTED)
         self.after_idle(self._place_underline)
@@ -148,36 +152,153 @@ class FirewallPage(tk.Frame):
 
     # --------------------------------------------------------------- apps --
     def _apps(self):
-        st: firewall.FirewallStatus = self.state["status"]
+        """Every installed app with a Block/Unblock button, blocked ones first, plus Browse."""
+        state = self.state
         card = RoundedCard(self.body, radius=16, padx=22, pady=18)
         card.pack(fill="both", expand=True)
         head = tk.Frame(card.body, bg=C.CARD)
         head.pack(fill="x")
         col = tk.Frame(head, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
-        tk.Label(col, text=t("fw_apps_title"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
-        tk.Label(col, text=t("fw_apps_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
-        add = ttk.Button(head, text=t("fw_block_app"), style="Accent.TButton", command=self._block_app)
-        add.pack(side="right")
-        if self.state["busy"]:
-            add.state(["disabled"])
-        tk.Frame(card.body, bg=C.BORDER, height=1).pack(fill="x", pady=(14, 4))
-        if not st.blocked_apps:
-            tk.Label(card.body, text=t("fw_no_blocked"), font=FONT, fg=C.TEXT_MUTED, bg=C.CARD).pack(pady=30)
-            return
-        for app in st.blocked_apps:
-            row = tk.Frame(card.body, bg=C.CARD)
-            row.pack(fill="x", pady=6)
-            icon_label(row, "blocked", 16, fg=C.BAD).pack(side="left", padx=(0, 12))
+        tk.Label(col, text=t("fw_apps_all_title"), font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        tk.Label(col, text=t("fw_apps_all_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
+        browse = ttk.Button(head, text=t("fw_browse"), style="Accent.TButton", command=self._block_app)
+        browse.pack(side="right")
+
+        search_row = tk.Frame(card.body, bg=C.CARD)
+        search_row.pack(fill="x", pady=(14, 8))
+        box = tk.Frame(search_row, bg=C.BORDER)
+        box.pack(side="left", fill="x", expand=True)
+        inner = tk.Frame(box, bg=C.BG)
+        inner.pack(fill="x", padx=1, pady=1)
+        icon_label(inner, "scan", 11, fg=C.TEXT_MUTED, bg=C.BG).pack(side="left", padx=(10, 4))
+        self.search = tk.Entry(inner, font=FONT, bg=C.BG, fg=C.TEXT, insertbackground=C.TEXT, relief="flat", bd=0,
+                               highlightthickness=0)
+        self.search.pack(side="left", fill="x", expand=True, ipady=7, padx=(0, 10))
+        self.search.insert(0, state["query"])
+        self.search.bind("<KeyRelease>", lambda e: self._on_search())
+        self.count_label = tk.Label(search_row, text="", font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD)
+        self.count_label.pack(side="right", padx=(12, 0))
+
+        area = tk.Frame(card.body, bg=C.CARD)
+        area.pack(fill="both", expand=True)
+        self.list_canvas = tk.Canvas(area, bg=C.CARD, highlightthickness=0, bd=0)
+        bar = ttk.Scrollbar(area, orient="vertical", command=self.list_canvas.yview, style="Slim.Vertical.TScrollbar")
+        self.list_canvas.configure(yscrollcommand=bar.set)
+        bar.pack(side="right", fill="y")
+        self.list_canvas.pack(side="left", fill="both", expand=True)
+        self.rows = tk.Frame(self.list_canvas, bg=C.CARD)
+        window = self.list_canvas.create_window(0, 0, window=self.rows, anchor="nw")
+        self.rows.bind("<Configure>", lambda e: self.list_canvas.configure(scrollregion=self.list_canvas.bbox("all")))
+        self.list_canvas.bind("<Configure>", lambda e: self.list_canvas.itemconfigure(window, width=e.width))
+        for widget in (self.list_canvas, self.rows):
+            widget.bind("<Enter>", lambda e: self.list_canvas.bind_all("<MouseWheel>", self._wheel))
+            widget.bind("<Leave>", lambda e: self.list_canvas.unbind_all("<MouseWheel>"))
+        self._fill_rows()
+        self.after_idle(lambda: self._alive(self.list_canvas) and self.list_canvas.yview_moveto(state["scroll"]))
+        if state["apps"] is None and not state["apps_loading"]:
+            self.load_apps()
+
+    def _entries(self):
+        """(name, path, icon, blocked rule name or None) for every app, blocked first."""
+        st: firewall.FirewallStatus = self.state["status"]
+        rules = {os.path.normcase(b.path): b.name for b in st.blocked_apps}
+        entries, listed = [], set()
+        for app in self.state["apps"] or []:
+            key = os.path.normcase(app.path)
+            listed.add(key)
+            entries.append((app.name, app.path, app.icon_png, rules.get(key)))
+        for key, rule in rules.items():  # blocked through Browse, or no longer installed
+            if key not in listed:
+                path = next(b.path for b in st.blocked_apps if b.name == rule)
+                entries.append((Path(path).stem, path, None, rule))
+        return sorted(entries, key=lambda e: (e[3] is None, e[0].lower()))
+
+    def _fill_rows(self):
+        for child in self.rows.winfo_children():
+            child.destroy()
+        query = self.state["query"].strip().lower()
+        entries = [e for e in self._entries() if not query or query in e[0].lower() or query in e[1].lower()]
+        blocked = sum(1 for e in entries if e[3])
+        self.count_label.configure(text=t("fw_apps_count", n=len(entries), blocked=blocked))
+        if self.state["apps"] is None:
+            tk.Label(self.rows, text=t("fw_finding_apps"), font=FONT, fg=C.TEXT_MUTED, bg=C.CARD).pack(pady=24)
+        elif not entries:
+            tk.Label(self.rows, text=t("fw_no_match"), font=FONT, fg=C.TEXT_MUTED, bg=C.CARD).pack(pady=24)
+        busy = self.state["busy"]
+        for name, path, icon, rule in entries:
+            row = tk.Frame(self.rows, bg=C.CARD)
+            row.pack(fill="x", pady=4)
+            image = self._icon(path, icon)
+            if image:
+                tk.Label(row, image=image, bg=C.CARD).pack(side="left", padx=(2, 12))
+            else:
+                icon_label(row, "apps", 16, fg=C.TEXT_MUTED).pack(side="left", padx=(6, 14))
             text = tk.Frame(row, bg=C.CARD)
             text.pack(side="left", fill="x", expand=True)
-            tk.Label(text, text=Path(app.path).name or app.name, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
-            tk.Label(text, text=app.path, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
-            btn = ttk.Button(row, text=t("fw_unblock"), style="Ghost.TButton",
-                             command=lambda n=app.name: self._change(lambda: firewall.unblock_app(n)))
-            btn.pack(side="right")
-            if self.state["busy"]:
+            title = tk.Frame(text, bg=C.CARD)
+            title.pack(anchor="w")
+            tk.Label(title, text=name, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left")
+            if rule:
+                tk.Label(title, text=t("fw_blocked_pill"), font=("Segoe UI Semibold", 8), fg="#0b1120", bg=C.BAD,
+                         padx=7, pady=1).pack(side="left", padx=(8, 0))
+            tk.Label(text, text=_shorten(path, 70), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
+            if rule:
+                btn = ttk.Button(row, text=t("fw_unblock"), style="Ghost.TButton",
+                                 command=lambda r=rule: self._change(lambda: firewall.unblock_app(r)))
+            else:
+                btn = ttk.Button(row, text=t("fw_block"), style="Danger.TButton",
+                                 command=lambda p=path: self._change(lambda: firewall.block_app(p)))
+            btn.pack(side="right", padx=(10, 4))
+            if busy:
                 btn.state(["disabled"])
+            for widget in (row, text, title):
+                widget.bind("<Enter>", lambda e: self.list_canvas.bind_all("<MouseWheel>", self._wheel))
+
+    def _icon(self, path, png):
+        cache = self.state["icons"]
+        if path not in cache:
+            cache[path] = None
+            if png:
+                try:
+                    import io
+
+                    from PIL import Image, ImageTk
+
+                    img = Image.open(io.BytesIO(png)).convert("RGBA").resize((24, 24), Image.LANCZOS)
+                    cache[path] = ImageTk.PhotoImage(img)
+                except (OSError, ValueError):
+                    pass
+        return cache[path]
+
+    def _on_search(self):
+        self.state["query"] = self.search.get()
+        self.state["scroll"] = 0.0
+        self._fill_rows()
+        self.list_canvas.yview_moveto(0)
+
+    def _wheel(self, event):
+        if self._alive(getattr(self, "list_canvas", None)):
+            self.list_canvas.yview_scroll(int(-event.delta / 120) * 3, "units")
+
+    def load_apps(self, force=False):
+        state = self.state
+        if state["apps_loading"] or (state["apps"] is not None and not force):
+            return
+        state["apps_loading"] = True
+        queue = self.app.event_queue
+
+        def run():
+            try:
+                queue.put(("fw_apps", apps_module.installed_apps()))
+            except Exception:  # the list is a convenience; Browse still works
+                queue.put(("fw_apps", []))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    @staticmethod
+    def _alive(widget):
+        return widget is not None and widget.winfo_exists()
 
     # ------------------------------------------------------------ actions --
     def _set_mode(self, mode):
@@ -225,10 +346,16 @@ class FirewallPage(tk.Frame):
             s["status"] = payload
         elif kind == "fw_done":
             s.update(busy=False, error=payload)
+        elif kind == "fw_apps":
+            s.update(apps=payload, apps_loading=False)
         elif kind == "fw_read_failed":
             s["error"] = payload
         if self.winfo_exists():
             self._render()
+
+
+def _shorten(text, limit):
+    return text if len(text) <= limit else text[:limit // 2 - 1] + "…" + text[-(limit // 2):]
 
 
 def _open(target):
@@ -239,4 +366,5 @@ def _open(target):
 
 
 def new_state() -> dict:
-    return {"status": None, "tab": "overview", "busy": False, "error": None}
+    return {"status": None, "tab": "overview", "busy": False, "error": None, "apps": None, "apps_loading": False,
+            "icons": {}, "query": "", "scroll": 0.0}
