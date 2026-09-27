@@ -92,6 +92,13 @@ header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, v
 .rate-pop textarea { width: 100%; min-height: 70px; resize: vertical; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: 14px "IBM Plex Sans", sans-serif; margin-bottom: 12px; box-sizing: border-box; }
 .rate-pop .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
 .rate-pop .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+.rate-pop input { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 14px "IBM Plex Sans", sans-serif; margin-bottom: 8px; }
+.rate-pop .said.good { color: var(--good); } .rate-pop .said.bad { color: var(--bad); }
+.rate-pop .all { display: block; margin-top: 10px; font-size: 13px; color: var(--accent); }
+.hidden-el { display: none !important; }
+.rating-line { margin-top: 10px; font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.rating-line .st { color: #fbbf24; letter-spacing: 1px; }
+.rating-line b { color: var(--text); }
 
 /* hero */
 .hero { padding: 84px 0 100px; position: relative; overflow: hidden; }
@@ -376,7 +383,7 @@ footer p { margin: 0; max-width: 70ch; }
 .pw-result.bad { color: var(--bad); } .pw-result.good { color: var(--good); } .pw-result.warn { color: var(--warn); }
 .pw-note { margin-top: 14px; font-size: 13px; color: var(--muted); }
 @media (max-width: 960px) { .sec-grid { grid-template-columns: 1fr; } }
-@media (max-width: 1120px) { .nav a.link[href^="https://github.com"] { display: none; } }
+@media (max-width: 1120px) { .nav a.link[href^="https://github.com"], .nav a.link[href="#security"] { display: none; } }
 @media (max-width: 420px) { .nav .btn.small { padding: 7px 10px; font-size: 13px; } .nav .brand span { display: none; } }
 
 @media (max-width: 960px) {
@@ -414,6 +421,7 @@ footer p { margin: 0; max-width: 70ch; }
     <a class="link" href="#firewall">Firewall</a>
     <a class="link" href="#security">Security</a>
     <a class="link" href="#tools">Tools</a>
+    <a class="link" href="reviews.html">Reviews</a>
     <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
     <div class="contact">
       <button class="btn ghost small" id="contact-btn" aria-expanded="false" aria-controls="contact-pop">Contact</button>
@@ -438,12 +446,14 @@ footer p { margin: 0; max-width: 70ch; }
           <button type="button" role="radio" aria-checked="false" aria-label="5 stars">&#9733;</button>
         </div>
         <div class="said" id="rate-said">Tap a star.</div>
-        <textarea id="rate-text" placeholder="What do you like, or what should be better? (optional)" aria-label="Your feedback"></textarea>
+        <input id="rate-name" class="hidden-el" maxlength="40" placeholder="Your name (optional)" aria-label="Your name">
+        <textarea id="rate-text" maxlength="600" placeholder="What do you like, or what should be better? (optional)" aria-label="Your feedback"></textarea>
         <div class="row">
           <a class="btn ghost small" href="https://github.com/willischilling/sentinel-antivirus/stargazers">Star on GitHub</a>
           <a class="btn primary small" id="rate-send" href="#" aria-disabled="true">Send rating</a>
         </div>
-        <p class="note">Send rating opens your email app with it filled in. This site doesn't track you.</p>
+        <p class="note" id="rate-note">Send rating opens your email app with it filled in. This site doesn't track you.</p>
+        <a class="all hidden-el" id="rate-all" href="reviews.html">See all reviews &rarr;</a>
       </div>
     </div>
     <a class="btn primary small" href="#install">Download</a>
@@ -464,6 +474,7 @@ footer p { margin: 0; max-width: 70ch; }
         </a>
         <a class="btn ghost" href="https://github.com/willischilling/sentinel-antivirus">View the source</a>
       </div>
+      <a class="rating-line hidden-el" id="rating-line" href="reviews.html" style="text-decoration:none"><span class="st" id="rating-stars"></span><b id="rating-avg"></b><span id="rating-count"></span></a>
       <div class="release-meta mono" id="release-meta">Latest release · 42 MB · <a href="https://github.com/willischilling/sentinel-antivirus/releases">all releases</a></div>
     </div>
 
@@ -896,6 +907,7 @@ python cli.py scan %USERPROFILE%\Downloads</pre>
   </div>
 </footer>
 
+<script src="reviews.js"></script>
 <script>
 // ---- live activity feed (a scripted example of the app's real log format) ----
 const lines = [
@@ -995,6 +1007,7 @@ const ratePop = document.getElementById("rate-pop"), rateBtn = document.getEleme
 const stars = [...document.querySelectorAll("#rate-stars button")], said = document.getElementById("rate-said");
 const rateSend = document.getElementById("rate-send"), rateText = document.getElementById("rate-text");
 const words = ["", "Not good", "Could be better", "It's OK", "Really good", "Love it!"];
+said.className = "said";
 let rating = 0;
 function paint(n) { stars.forEach((b, i) => b.classList.toggle("on", i < n)); }
 function updateSend() {
@@ -1007,13 +1020,45 @@ stars.forEach((b, i) => {
   b.addEventListener("mouseenter", () => paint(i + 1));
   b.addEventListener("mouseleave", () => paint(rating));
   b.addEventListener("click", () => {
-    rating = i + 1; paint(rating); said.textContent = words[rating];
+    rating = i + 1; paint(rating); said.className = "said"; said.textContent = words[rating];
     stars.forEach((x, k) => x.setAttribute("aria-checked", k === i));
     updateSend();
   });
 });
 rateText.addEventListener("input", updateSend);
-rateSend.addEventListener("click", () => { if (rating) setTimeout(() => { said.textContent = "Thanks! Your email app should open now."; }, 200); });
+rateSend.addEventListener("click", async e => {
+  if (!rating) return;
+  if (!Reviews.on) { setTimeout(() => { said.textContent = "Thanks! Your email app should open now."; }, 200); return; }
+  e.preventDefault();  // reviews are on: post it to the reviews page instead of emailing
+  rateSend.setAttribute("aria-disabled", "true"); said.className = "said"; said.textContent = "Posting…";
+  try {
+    await Reviews.post(document.getElementById("rate-name").value, rating, rateText.value);
+    said.className = "said good"; said.textContent = "Thanks! Your review is up.";
+    rateText.value = ""; document.getElementById("rate-name").value = "";
+    loadRating();
+  } catch (err) {
+    said.className = "said bad"; said.textContent = err.message;
+    rateSend.setAttribute("aria-disabled", "false");
+  }
+});
+function loadRating() {
+  Reviews.stats().then(st => {
+    if (!st.count) return;
+    const avg = Number(st.average);
+    document.getElementById("rating-stars").textContent = Reviews.starText(Math.round(avg));
+    document.getElementById("rating-avg").textContent = avg.toFixed(1);
+    document.getElementById("rating-count").textContent = `from ${st.count} review${st.count === 1 ? "" : "s"} · read them`;
+    document.getElementById("rating-line").classList.remove("hidden-el");
+    rateBtn.innerHTML = "&#9733; " + avg.toFixed(1) + " &middot; Rate us";
+  }).catch(() => {});
+}
+if (Reviews.on) {
+  document.getElementById("rate-name").classList.remove("hidden-el");
+  document.getElementById("rate-all").classList.remove("hidden-el");
+  document.getElementById("rate-note").textContent = "Your review shows up on the reviews page for everyone. Keep it friendly; no links.";
+  rateSend.textContent = "Post review";
+  loadRating();
+}
 rateBtn.addEventListener("click", e => {
   e.stopPropagation();
   pop.classList.remove("open"); cbtn.setAttribute("aria-expanded", false);

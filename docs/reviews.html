@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel Reviews</title>
+<meta name="description" content="What people say about Sentinel Antivirus, with star ratings and comments.">
+<link rel="icon" href="assets/emblem.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100,500;100,700;125,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b1120; --panel: #0f172a; --card: #151f33; --line: #24324d; --text: #e7ecf5; --muted: #8b97ad;
+  --accent: #3b82f6; --accent-strong: #2563eb; --good: #22c55e; --warn: #f59e0b; --bad: #ef4444; --star: #fbbf24;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f5f7fb; --panel: #e9edf5; --card: #ffffff; --line: #dfe4ee; --text: #0f172a; --muted: #5b6477;
+    --accent: #2563eb; --accent-strong: #1d4ed8; --good: #16a34a; --warn: #d97706; --bad: #dc2626; --star: #f59e0b;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f5f7fb; --panel: #e9edf5; --card: #ffffff; --line: #dfe4ee; --text: #0f172a; --muted: #5b6477;
+  --accent: #2563eb; --accent-strong: #1d4ed8; --good: #16a34a; --warn: #d97706; --bad: #dc2626; --star: #f59e0b;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 "IBM Plex Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+.wrap { width: min(1000px, 100% - 32px); margin-inline: auto; }
+h1, h2 { font-family: "Archivo", sans-serif; font-weight: 800; font-stretch: 125%; line-height: 1.02; margin: 0; letter-spacing: -.01em; }
+h1 { font-size: clamp(36px, 6vw, 60px); }
+h2 { font-size: 20px; font-stretch: 100%; font-weight: 700; letter-spacing: 0; }
+.kicker { font: 500 12px/1 "IBM Plex Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 16px; }
+header { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.nav { display: flex; align-items: center; gap: 22px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 11px; text-decoration: none; margin-right: auto; }
+.brand img { width: 30px; height: 30px; background: #151f33; border-radius: 7px; padding: 3px; }
+.brand span { font: 700 15px/1 "Archivo", sans-serif; font-stretch: 125%; letter-spacing: .16em; }
+.nav a.link { text-decoration: none; color: var(--muted); font-size: 14px; }
+.nav a.link:hover { color: var(--text); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 11px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; border: 1px solid transparent; cursor: pointer; font-family: inherit; }
+.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-strong); }
+.btn.primary:disabled { opacity: .5; cursor: default; }
+.btn.small { padding: 8px 14px; font-size: 14px; }
+main { padding: 64px 0 90px; }
+.intro { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 36px; }
+.intro p { color: var(--muted); margin: 14px 0 0; max-width: 52ch; }
+.grid { display: grid; grid-template-columns: 340px 1fr; gap: 22px; align-items: start; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+.side { display: grid; gap: 22px; position: sticky; top: 86px; }
+.avg { display: flex; align-items: center; gap: 16px; }
+.avg b { font: 800 56px/1 "Archivo", sans-serif; font-stretch: 125%; }
+.stars-line { color: var(--star); font-size: 22px; letter-spacing: 2px; line-height: 1; }
+.avg small { display: block; color: var(--muted); font-size: 13.5px; margin-top: 6px; }
+.bars { margin-top: 18px; display: grid; gap: 7px; }
+.bar { display: grid; grid-template-columns: 26px 1fr 34px; align-items: center; gap: 10px; font: 12.5px "IBM Plex Mono", monospace; color: var(--muted); }
+.bar .track { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
+.bar .track i { display: block; height: 100%; background: var(--star); width: 0; transition: width .5s; }
+.bar span:last-child { text-align: right; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 6px; }
+input, textarea { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px; font: 15px "IBM Plex Sans", sans-serif; }
+input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+textarea { min-height: 96px; resize: vertical; }
+.pick { display: flex; gap: 4px; }
+.pick button { border: 0; background: none; padding: 2px; cursor: pointer; color: var(--line); font-size: 32px; line-height: 1; transition: transform .12s, color .12s; }
+.pick button.on { color: var(--star); }
+.pick button:hover { transform: scale(1.12); }
+.pick button:focus-visible { outline: 2px solid var(--accent); border-radius: 6px; }
+.count { text-align: right; font: 12px "IBM Plex Mono", monospace; color: var(--muted); margin-top: 4px; }
+.form-foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.msg { font-size: 14px; }
+.msg.bad { color: var(--bad); } .msg.good { color: var(--good); }
+.list { display: grid; gap: 14px; }
+.review { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.review .top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.review .who { font-weight: 600; }
+.review .when { color: var(--muted); font-size: 13px; margin-left: auto; }
+.review .stars-line { font-size: 16px; }
+.review p { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review.new { border-color: var(--accent); }
+.empty { color: var(--muted); text-align: center; padding: 50px 20px; border: 1px dashed var(--line); border-radius: 14px; }
+.note { font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+footer { border-top: 1px solid var(--line); padding: 28px 0; color: var(--muted); font-size: 14px; }
+@media (max-width: 820px) { .grid { grid-template-columns: 1fr; } .side { position: static; } .nav a.link { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <nav class="wrap nav">
+    <a class="brand" href="./"><img src="assets/emblem.png" alt=""><span>SENTINEL</span></a>
+    <a class="link" href="./">Home</a>
+    <a class="link" href="./#tools">Features</a>
+    <a class="btn primary small" href="https://github.com/willischilling/sentinel-antivirus/releases/latest/download/SentinelSetup.exe">Download</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="intro">
+    <div>
+      <div class="kicker">Reviews</div>
+      <h1>What people think.</h1>
+      <p>Real ratings from people who tried Sentinel. Tried it too? Leave yours: no account needed.</p>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="side">
+      <div class="card" aria-live="polite">
+        <div class="avg">
+          <b id="avg">–</b>
+          <div><div class="stars-line" id="avg-stars">☆☆☆☆☆</div><small id="avg-count">Loading…</small></div>
+        </div>
+        <div class="bars" id="bars"></div>
+      </div>
+
+      <form class="card" id="form" autocomplete="off">
+        <h2>Leave a review</h2>
+        <label for="stars-pick">Your rating</label>
+        <div class="pick" id="stars-pick" role="radiogroup" aria-label="Your rating"></div>
+        <label for="name">Name</label>
+        <input id="name" maxlength="40" placeholder="Anonymous">
+        <label for="comment">Comment <span style="opacity:.7">(optional)</span></label>
+        <textarea id="comment" maxlength="600" placeholder="What do you like? What should be better?"></textarea>
+        <div class="count" id="count">0 / 600</div>
+        <div class="form-foot">
+          <button class="btn primary" id="post" type="submit" disabled>Post review</button>
+          <span class="msg" id="msg" role="status"></span>
+        </div>
+        <p class="note">Reviews appear right away for everyone. No links, and keep it friendly: mean or spammy reviews get removed. Your name is the only personal info saved.</p>
+      </form>
+    </div>
+
+    <div class="list" id="list"><div class="empty">Loading reviews…</div></div>
+  </div>
+</main>
+
+<footer><div class="wrap">Sentinel Antivirus &middot; <a href="https://github.com/willischilling/sentinel-antivirus">GitHub</a></div></footer>
+
+<script src="reviews.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const words = ["", "Not good", "Could be better", "It's OK", "Really good", "Love it!"];
+let picked = 0;
+
+function when(iso) {
+  const d = new Date(iso), days = Math.floor((Date.now() - d) / 864e5);
+  if (days < 1) return "Today";
+  if (days < 2) return "Yesterday";
+  if (days < 30) return days + " days ago";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function reviewCard(r, fresh) {
+  const el = document.createElement("article");
+  el.className = "review" + (fresh ? " new" : "");
+  const top = document.createElement("div"); top.className = "top";
+  const who = document.createElement("span"); who.className = "who"; who.textContent = r.name;
+  const st = document.createElement("span"); st.className = "stars-line"; st.textContent = Reviews.starText(r.stars);
+  st.setAttribute("aria-label", r.stars + " out of 5 stars");
+  const at = document.createElement("span"); at.className = "when"; at.textContent = when(r.created_at);
+  top.append(who, st, at); el.append(top);
+  if (r.comment) { const p = document.createElement("p"); p.textContent = r.comment; el.append(p); }
+  return el;
+}
+
+function showStats(s) {
+  const avg = Number(s.average) || 0;
+  $("avg").textContent = s.count ? avg.toFixed(1) : "–";
+  $("avg-stars").textContent = Reviews.starText(Math.round(avg));
+  $("avg-count").textContent = s.count ? `Based on ${s.count} review${s.count === 1 ? "" : "s"}` : "No reviews yet. Be the first!";
+  $("bars").innerHTML = "";
+  for (let n = 5; n >= 1; n--) {
+    const c = s["s" + n] || 0, row = document.createElement("div"); row.className = "bar";
+    row.innerHTML = `<span>${n}★</span><span class="track"><i></i></span><span>${c}</span>`;
+    $("bars").append(row);
+    requestAnimationFrame(() => row.querySelector("i").style.width = (s.count ? 100 * c / s.count : 0) + "%");
+  }
+}
+
+async function load() {
+  if (!Reviews.on) {
+    $("avg-count").textContent = "Reviews open soon.";
+    $("list").innerHTML = '<div class="empty">Reviews open soon.</div>';
+    $("post").disabled = true;
+    return;
+  }
+  try {
+    const [stats, rows] = await Promise.all([Reviews.stats(), Reviews.list()]);
+    showStats(stats);
+    $("list").innerHTML = "";
+    if (!rows.length) $("list").innerHTML = '<div class="empty">No reviews yet. Be the first!</div>';
+    rows.forEach(r => $("list").append(reviewCard(r)));
+  } catch (e) {
+    $("avg-count").textContent = "Couldn't load reviews.";
+    $("list").innerHTML = '<div class="empty">Couldn\'t load reviews right now. Try again later.</div>';
+  }
+}
+
+// star picker
+for (let n = 1; n <= 5; n++) {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = "★"; b.setAttribute("role", "radio");
+  b.setAttribute("aria-label", n + (n === 1 ? " star" : " stars")); b.setAttribute("aria-checked", "false");
+  b.addEventListener("mouseenter", () => paint(n));
+  b.addEventListener("mouseleave", () => paint(picked));
+  b.addEventListener("click", () => {
+    picked = n; paint(n); $("msg").className = "msg"; $("msg").textContent = words[n];
+    [...$("stars-pick").children].forEach((x, i) => x.setAttribute("aria-checked", i === n - 1));
+    $("post").disabled = !Reviews.on;
+  });
+  $("stars-pick").append(b);
+}
+function paint(n) { [...$("stars-pick").children].forEach((b, i) => b.classList.toggle("on", i < n)); }
+$("comment").addEventListener("input", () => $("count").textContent = $("comment").value.length + " / 600");
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!picked || !Reviews.on) return;
+  const comment = $("comment").value;
+  if (/(https?:\/\/|www\.|discord\.gg)/i.test(comment)) {
+    $("msg").className = "msg bad"; $("msg").textContent = "Links aren't allowed in reviews."; return;
+  }
+  $("post").disabled = true; $("msg").className = "msg"; $("msg").textContent = "Posting…";
+  try {
+    await Reviews.post($("name").value, picked, comment);
+    $("msg").className = "msg good"; $("msg").textContent = "Thanks! Your review is up.";
+    const mine = { name: $("name").value.trim() || "Anonymous", stars: picked, comment: comment.trim(), created_at: new Date().toISOString() };
+    const empty = $("list").querySelector(".empty"); if (empty) empty.remove();
+    $("list").prepend(reviewCard(mine, true));
+    $("form").reset(); picked = 0; paint(0); $("count").textContent = "0 / 600";
+    Reviews.stats().then(showStats).catch(() => {});
+  } catch (err) {
+    $("msg").className = "msg bad"; $("msg").textContent = err.message;
+    $("post").disabled = false;
+  }
+});
+
+load();
+</script>
+</body>
+</html>
