@@ -43,6 +43,7 @@ class ToolsPage(tk.Frame):
         self.scroll.pack(fill="both", expand=True)
         self.grid_frame = self.scroll.inner
         self._render()
+        self.scroll.to_top()
 
     def refresh(self):
         """Fills in the cards' summaries (both checks are quick and read-only)."""
@@ -52,43 +53,63 @@ class ToolsPage(tk.Frame):
             self.app.cleaner_page.analyze()
         if self.app.guard_state["items"] is None:
             self.app.guard_page.refresh()
+        if self.app.startup_state["apps"] is None:
+            self.app.startup_page.refresh()
         self._render()
 
     def _render(self):
         for child in self.grid_frame.winfo_children():
             child.destroy()
-        grid = self.grid_frame
-        for i in range(2):
-            grid.columnconfigure(i, weight=1, uniform="tools")
-        cards = [
-            ("puzzle", t("ext_title"), t("tools_ext_desc"), self._ext_status(), "extensions"),
-            ("broom", t("clean_title"), t("tools_clean_desc"), self._clean_status(), "cleaner"),
-            ("scan", t("privacy_title"), t("tools_privacy_desc"), self._privacy_status(), "privacy"),
-            ("globe", t("net_title"), t("tools_net_desc"), self._net_status(), "network"),
-            ("web", t("guard_title"), t("tools_guard_desc"), self._guard_status(), "guard"),
-            ("delete", t("shred_title"), t("tools_shred_desc"), (t("tools_shred_status"), C.TEXT_MUTED), "shred"),
-            ("health", t("rec_title"), t("tools_rec_desc"), self._rec_status(), "recovery"),
-            ("key", t("pw_title"), t("tools_pw_desc"), (t("tools_pw_status"), C.TEXT_MUTED), "security"),
+        sections = [
+            ("tools_sec_accounts", [
+                ("key", t("pw_title"), t("tools_pw_desc"), (t("tools_pw_status"), C.TEXT_MUTED), "security"),
+                ("lock", t("breach_title"), t("tools_breach_desc"), self._breach_status(), "breach"),
+                ("health", t("rec_title"), t("tools_rec_desc"), self._rec_status(), "recovery"),
+            ]),
+            ("tools_sec_privacy", [
+                ("scan", t("privacy_title"), t("tools_privacy_desc"), self._privacy_status(), "privacy"),
+                ("globe", t("net_title"), t("tools_net_desc"), self._net_status(), "network"),
+                ("web", t("guard_title"), t("tools_guard_desc"), self._guard_status(), "guard"),
+                ("warning", t("link_title"), t("tools_link_desc"), self._link_status(), "linkguard"),
+            ]),
+            ("tools_sec_speed", [
+                ("broom", t("clean_title"), t("tools_clean_desc"), self._clean_status(), "cleaner"),
+                ("power", t("startup_title"), t("tools_startup_desc"), self._startup_status(), "startup"),
+            ]),
+            ("tools_sec_files", [
+                ("puzzle", t("ext_title"), t("tools_ext_desc"), self._ext_status(), "extensions"),
+                ("delete", t("shred_title"), t("tools_shred_desc"), (t("tools_shred_status"), C.TEXT_MUTED), "shred"),
+                ("shield", t("sandbox_title"), t("tools_sandbox_desc"), self._sandbox_status(), "sandbox"),
+            ]),
+            ("tools_sec_report", [
+                ("history", t("report_title"), t("tools_report_desc"), self._report_status(), "report"),
+            ]),
         ]
-        for i, (icon, title, desc, (status, color), target) in enumerate(cards):
-            grid.rowconfigure(i // 2, weight=1, uniform="toolrows", minsize=150)
-            card = RoundedCard(grid, radius=16, padx=22, pady=16, command=lambda p=target: self._open(p))
-            card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0 if i % 2 == 0 else 7, 7 if i % 2 == 0 else 8),
-                      pady=(0 if i < 2 else 7, 7))
-            head = tk.Frame(card.body, bg=C.CARD)
-            head.pack(fill="x")
-            badge = tk.Frame(head, bg=C.BORDER, width=40, height=40)
-            badge.pack(side="left")
-            badge.pack_propagate(False)
-            icon_label(badge, icon, 16, fg=C.ACCENT, bg=C.BORDER).pack(expand=True)
-            tk.Label(head, text=title, font=FONT_LARGE, fg=C.TEXT, bg=C.CARD).pack(side="left", padx=(14, 0))
-            tk.Label(head, text="›", font=FONT_LARGE, fg=C.TEXT_MUTED, bg=C.CARD).pack(side="right")
-            text = tk.Label(card.body, text=desc, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, justify="left",
-                            anchor="w")
-            text.pack(anchor="w", fill="x", pady=(12, 0))
-            wrap_to_width(text, card.body, 180)
-            tk.Label(card.body, text=status, font=FONT_BOLD, fg=color, bg=C.CARD, anchor="w").pack(
-                anchor="sw", side="bottom", fill="x", pady=(10, 0))
+        for s_i, (heading, cards) in enumerate(sections):
+            tk.Label(self.grid_frame, text=t(heading).upper(), font=(C.UI_SEMIBOLD, 9), fg=C.TEXT_MUTED,
+                     bg=C.BG).pack(anchor="w", pady=(0 if s_i == 0 else 14, 6))
+            grid = tk.Frame(self.grid_frame, bg=C.BG)
+            grid.pack(fill="x", padx=(0, 8))
+            for i in range(2):
+                grid.columnconfigure(i, weight=1, uniform="tools")
+            for i, (icon, title, desc, (status, color), target) in enumerate(cards):
+                card = RoundedCard(grid, radius=14, padx=18, pady=12, command=lambda p=target: self._open(p))
+                card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0 if i % 2 == 0 else 6, 6 if i % 2 == 0 else 0),
+                          pady=(0, 12))
+                head = tk.Frame(card.body, bg=C.CARD)
+                head.pack(fill="x")
+                badge = tk.Frame(head, bg=C.BORDER, width=34, height=34)
+                badge.pack(side="left")
+                badge.pack_propagate(False)
+                icon_label(badge, icon, 14, fg=C.ACCENT, bg=C.BORDER).pack(expand=True)
+                tk.Label(head, text=title, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(side="left", padx=(12, 0))
+                tk.Label(head, text="›", font=FONT_LARGE, fg=C.TEXT_MUTED, bg=C.CARD).pack(side="right")
+                text = tk.Label(card.body, text=desc, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, justify="left",
+                                anchor="w")
+                text.pack(anchor="w", fill="x", pady=(8, 0))
+                wrap_to_width(text, card.body, 180)
+                tk.Label(card.body, text=status, font=FONT_BOLD, fg=color, bg=C.CARD, anchor="w").pack(
+                    anchor="sw", side="bottom", fill="x", pady=(6, 0))
 
     def _open(self, page):
         self.app._show_page(page)
@@ -107,6 +128,44 @@ class ToolsPage(tk.Frame):
         if result is None:
             return t("tools_net_none"), C.TEXT_MUTED
         return t("net_found", n=number(len(result.devices))), C.ACCENT
+
+    def _breach_status(self):
+        result = self.app.breach_state["result"]
+        if result is None:
+            return t("tools_breach_none"), C.TEXT_MUTED
+        return (t("breach_found", n=number(len(result))), C.WARN) if result else (t("breach_none"), C.GOOD)
+
+    @staticmethod
+    def _link_status():
+        from core import linkguard
+
+        if not linkguard.enabled():
+            return t("link_off"), C.TEXT_MUTED
+        warned = len(linkguard.recent())
+        return (t("tools_link_warned", n=number(warned)), C.WARN) if warned else (t("tools_link_on"), C.GOOD)
+
+    def _startup_status(self):
+        apps = self.app.startup_state["apps"]
+        if apps is None:
+            return t("tools_checking"), C.TEXT_MUTED
+        return t("startup_count", on=number(sum(1 for a in apps if a.enabled)), total=number(len(apps))), C.ACCENT
+
+    @staticmethod
+    def _sandbox_status():
+        from core import sandbox
+
+        state = sandbox.status()
+        return {"ready": (t("tools_sandbox_ready"), C.GOOD), "off": (t("tools_sandbox_off"), C.TEXT_MUTED)}.get(
+            state, (t("sandbox_unsupported"), C.TEXT_MUTED))
+
+    @staticmethod
+    def _report_status():
+        from core import report
+
+        data = report.latest()
+        if not data:
+            return t("tools_report_none"), C.TEXT_MUTED
+        return t("tools_report_score", score=data.get("score") if data.get("score") is not None else "–"), C.ACCENT
 
     def _guard_status(self):
         items = self.app.guard_state["items"]

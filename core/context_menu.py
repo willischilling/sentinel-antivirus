@@ -9,10 +9,12 @@ import sys
 
 FLAG = "--scan"
 SHRED_FLAG = "--shred"
+SANDBOX_FLAG = "--sandbox"
 # verb -> (registry key name, command-line flag, the kinds of item it appears on)
 VERBS = {
     "scan": ("SentinelScan", FLAG, ("*", "Directory", "Drive")),
     "shred": ("SentinelShred", SHRED_FLAG, ("*", "Directory")),
+    "sandbox": ("SentinelSandbox", SANDBOX_FLAG, ("*",)),
 }
 
 
@@ -57,10 +59,14 @@ def sync():
     from . import settings
     from .i18n import t
 
+    from . import sandbox
+
     conf = settings.load()
-    for verb, setting, label in (("scan", "context_menu", "ctx_scan_with"), ("shred", "shred_menu", "ctx_shred_with")):
+    sandbox_ready = sandbox.status() == "ready"  # only offered where Windows Sandbox is turned on
+    for verb, setting, label in (("scan", "context_menu", "ctx_scan_with"), ("shred", "shred_menu", "ctx_shred_with"),
+                                 ("sandbox", "sandbox_menu", "ctx_sandbox")):
         try:
-            if conf.get(setting, True):
+            if conf.get(setting, True) and (verb != "sandbox" or sandbox_ready):
                 enable(t(label), verb)
             else:
                 disable(verb)

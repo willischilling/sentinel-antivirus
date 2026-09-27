@@ -16,7 +16,7 @@ import psutil
 import launcher
 import single_instance
 from core import (
-    activity, app_update, authenticode, context_menu, database, elevate, gamemode, hijack, i18n, netscan, paths, privacy,
+    activity, app_update, authenticode, context_menu, database, linkguard, report, scan_requests, elevate, gamemode, hijack, i18n, netscan, paths, privacy,
     quarantine, recovery, scanner, schedule, settings, signatures, threat_intel, usb, vpn, wifi,
 )
 from core.version import VERSION
@@ -74,6 +74,9 @@ class Agent(tk.Tk):
         self._held = []          # (kind, payload) popups waiting for the game to end
         self._game = None        # the full-screen program while game mode is holding popups
         self._next_game_check = 0.0
+        self._clip_counter = linkguard.clipboard_counter()  # what's already copied isn't news
+        self._clip_warned = set()
+        self._next_clip_check = 0.0
 
         saved = settings.load().get("watch_path")
         watch_path = saved if saved and Path(saved).exists() else default_watch_path()
@@ -107,6 +110,7 @@ class Agent(tk.Tk):
         threading.Thread(target=self._guard_loop, daemon=True).start()
         threading.Thread(target=self._network_loop, daemon=True).start()
         threading.Thread(target=self._auto_update_loop, daemon=True).start()
+        threading.Thread(target=self._report_loop, daemon=True).start()
         self.after(100, self._pump)
         self.after(4000, self._maybe_show_updated)
         context_menu.sync()  # right after an automatic update, before the window is ever opened
@@ -422,6 +426,36 @@ class Agent(tk.Tk):
                 activity.log(t("log_autoupdate_failed", error=e), "warn")
             time.sleep(AUTO_UPDATE_EVERY)
 
+    # ---------------------------------------------------------- weekly report --
+    def _report_loop(self):
+        """Makes the weekly security report when it's due (checked hourly)."""
+        time.sleep(120)
+        while True:
+            try:
+                if report.enabled() and report.due() and self._game is None:
+                    made = report.build(protection_on=True)
+                    report.save(made)
+                    self.events.put(("report", made))
+            except Exception as e:
+                activity.log(t("log_report_failed", error=e), "warn")
+            time.sleep(3600)
+
+    def _on_report(self, made):
+        activity.log(t("log_report"), "muted")
+        found = made.get("threats") or 0
+        detail = t("report_toast_threats", n=number(found)) if found else t("report_toast_clean")
+        score = made.get("score")
+
+        def open_report():
+            scan_requests.add("report", "page")
+            launcher.open_ui()
+
+        self.toasts.show(title=t("report_toast_title"),
+                         filename=t("report_toast_score", score=score) if score is not None else "Sentinel",
+                         detail=detail, location="", accent=C.ACCENT, auto_close_ms=30000,
+                         actions=[(t("report_open"), "Accent.TButton", open_report),
+                                  (t("autovpn_ok"), "Ghost.TButton", lambda: None)])
+
     def _maybe_show_updated(self):
         seen = settings.load().get("seen_version")
         if seen != VERSION:
@@ -475,6 +509,9 @@ class Agent(tk.Tk):
         if time.monotonic() >= self._next_language_check:
             self._next_language_check = time.monotonic() + LANGUAGE_CHECK_SECONDS
             self._sync_language()
+        if time.monotonic() >= self._next_clip_check:
+            self._next_clip_check = time.monotonic() + 0.7
+            self._check_clipboard()
         if time.monotonic() >= self._next_game_check:
             self._next_game_check = time.monotonic() + GAME_CHECK_SECONDS
             self._check_game_mode()
@@ -513,6 +550,8 @@ class Agent(tk.Tk):
                     self._on_new_device(*payload)
                 elif kind == "updated":
                     self._on_updated(payload)
+                elif kind == "report":
+                    self._on_report(payload)
                 elif kind == "open_ui":
                     launcher.open_ui()
                 elif kind == "turn_off":
@@ -526,6 +565,42 @@ class Agent(tk.Tk):
         except queue.Empty:
             pass
         self.after(50, self._pump)
+
+    # ------------------------------------------------------------ link guard --
+    def _check_clipboard(self):
+        """Checks links in newly copied text (the counter changes only when something's copied)."""
+        counter = linkguard.clipboard_counter()
+        if counter == self._clip_counter:
+            return
+        self._clip_counter = counter
+        if not linkguard.enabled():
+            return
+        try:
+            text = self.clipboard_get()
+        except tk.TclError:  # not text (an image, files...)
+            return
+        for warning in linkguard.check_text(text):
+            if warning.link in self._clip_warned:
+                continue
+            self._clip_warned.add(warning.link)
+            linkguard.remember(warning)
+            self._on_bad_link(warning)
+            break  # one popup per copy
+
+    def _on_bad_link(self, warning):
+        reason = t(warning.finding.key, **warning.finding.values)
+        activity.log(t("log_bad_link", host=warning.host, reason=reason), "threat")
+
+        def clear():
+            linkguard.clear_clipboard()
+            return t("link_cleared")
+
+        self.toasts.show(title=t("link_toast_title"), filename=warning.host, detail=reason,
+                         location=warning.link if len(warning.link) <= 90 else warning.link[:89] + "…",
+                         accent=C.BAD,
+                         actions=[(t("link_clear"), "Danger.TButton", clear),
+                                  (t("autovpn_ok"), "Ghost.TButton", lambda: None)])
+        self._beep(True)
 
     def _check_game_mode(self):
         app = gamemode.fullscreen_app() if gamemode.enabled() else None

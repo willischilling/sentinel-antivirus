@@ -15,6 +15,37 @@ from theme import FONT, FONT_BOLD
 SUPERSAMPLE = 4
 _image_cache = {}
 
+
+def _unique_callback_names():
+    """Tkinter names each Python callback after its object's memory address. Pages here redraw
+    often, so a pending "after idle" call can outlive its widget while a new callback reuses the
+    freed address, and the old call then lands on the wrong function ("missing 1 required
+    positional argument"). A counter in every name rules that out."""
+    import itertools
+
+    counter = itertools.count()
+    original = tk.Misc._register
+
+    def _register(self, func, subst=None, needcleanup=1):
+        f = tk.CallWrapper(func, subst, self).__call__
+        name = f"{id(f)}_{next(counter)}"
+        try:
+            name += getattr(func, "__func__", func).__name__
+        except AttributeError:
+            pass
+        self.tk.createcommand(name, f)
+        if needcleanup:
+            if self._tclCommands is None:
+                self._tclCommands = []
+            self._tclCommands.append(name)
+        return name
+
+    _register.__doc__ = original.__doc__
+    tk.Misc._register = _register
+
+
+_unique_callback_names()
+
 # Segoe Fluent Icons (Windows 11) / Segoe MDL2 Assets (Windows 10) codepoints.
 ICONS = {
     "home": "",
@@ -203,8 +234,9 @@ class RoundedCard(tk.Frame):
             for child in widget.winfo_children():
                 bind_all(child)
 
-        # Bind after the caller has filled in the body.
-        self.after_idle(lambda: bind_all(self))
+        # Bind after the caller has filled in the body (cancelled if the card is gone by then).
+        job = self.after_idle(lambda: bind_all(self))
+        self.bind("<Destroy>", lambda e: self.after_cancel(job) if e.widget is self else None, add="+")
 
     def _maybe_leave(self):
         x, y = self.winfo_pointerxy()

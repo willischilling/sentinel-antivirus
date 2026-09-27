@@ -11,7 +11,7 @@ from pathlib import Path
 from . import paths
 
 FOLDER = paths.DATA_DIR / "scan_requests"
-KINDS = ("scan", "shred")
+KINDS = ("scan", "shred", "page")  # page: "open the window on this page"
 
 
 def add(path: str, kind: str = "scan"):
@@ -29,7 +29,7 @@ def pending(kind: str = "scan") -> bool:
         return False
 
 
-def take(kind: str = "scan") -> list[str]:
+def take(kind: str = "scan", must_exist: bool = True) -> list[str]:
     """Every waiting path of this kind (existing ones only, no repeats), removing the requests."""
     found = []
     try:
@@ -42,6 +42,6 @@ def take(kind: str = "scan") -> list[str]:
             request.unlink()
         except OSError:
             continue
-        if value and Path(value).exists() and value not in found:
+        if value and (not must_exist or Path(value).exists()) and value not in found:
             found.append(value)
     return found

@@ -143,6 +143,14 @@ def _perform(action: str, args: list[str]):
         from . import shield
 
         shield.elevated(args[0], args[1:])
+    elif action == "sandbox":
+        from . import sandbox
+
+        sandbox.elevated(args)
+    elif action == "startupapps":
+        from . import startup_apps
+
+        startup_apps.elevated(args)
     elif action == "browserguard":
         from . import hijack
 

@@ -42,10 +42,16 @@ from privacy_page import PrivacyPage
 from network_page import NetworkPage, new_state as new_net_state
 from guard_page import GuardPage, new_state as new_guard_state
 from shred_page import ShredPage
+from breach_page import BreachPage, new_state as new_breach_state
+from startup_page import StartupPage, new_state as new_startup_state
+from linkguard_page import LinkGuardPage
+from sandbox_page import SandboxPage, open_in_sandbox
+from report_page import ReportPage
 
 # Pages opened from another one: the sidebar keeps that one highlighted.
 PARENT_PAGE = {"security": "dashboard", "recovery": "tools", "extensions": "tools", "cleaner": "tools",
-               "shield": "protection", "privacy": "tools", "network": "tools", "guard": "tools", "shred": "tools"}
+               "shield": "protection", "privacy": "tools", "network": "tools", "guard": "tools", "shred": "tools", "breach": "tools", "startup": "tools", "linkguard": "tools",
+               "sandbox": "tools", "report": "tools"}
 
 
 def configure_style(root: tk.Tk):
@@ -200,6 +206,8 @@ class App(tk.Tk):
         self.shield_state = new_shield_state()
         self.net_state = new_net_state()
         self.guard_state = new_guard_state()
+        self.breach_state = new_breach_state()
+        self.startup_state = new_startup_state()
         self._shredding = False
         recovery.check_history()  # e.g. a stealer the background agent found while this window was closed
 
@@ -348,6 +356,16 @@ class App(tk.Tk):
         self.guard_page = GuardPage(self.content, self)
         self.pages["guard"] = self.guard_page
         self.pages["shred"] = ShredPage(self.content, self)
+        self.breach_page = BreachPage(self.content, self)
+        self.pages["breach"] = self.breach_page
+        self.startup_page = StartupPage(self.content, self)
+        self.pages["startup"] = self.startup_page
+        self.linkguard_page = LinkGuardPage(self.content, self)
+        self.pages["linkguard"] = self.linkguard_page
+        self.sandbox_page = SandboxPage(self.content, self)
+        self.pages["sandbox"] = self.sandbox_page
+        self.report_page = ReportPage(self.content, self)
+        self.pages["report"] = self.report_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -390,6 +408,10 @@ class App(tk.Tk):
             self.network_page.scan()
         elif key == "guard":
             self.guard_page.refresh()
+        elif key == "startup":
+            self.startup_page.refresh()
+        elif key in ("linkguard", "sandbox", "report"):
+            self.pages[key].refresh()
 
     # ---------------------------------------------------------- dashboard --
     def _build_dashboard_page(self):
@@ -1120,6 +1142,11 @@ class App(tk.Tk):
     def _check_scan_requests(self):
         """Right-click "Scan with Sentinel": gather every selected path (Explorer starts one
         Sentinel per file) and scan them together once the last one has arrived."""
+        if scan_requests.pending("page"):  # e.g. "Open report" on the weekly report popup
+            for page in scan_requests.take("page", must_exist=False):
+                if page in self.pages:
+                    self._show_window()
+                    self._show_page(page)
         if not self._shredding and scan_requests.pending("shred"):
             items = scan_requests.take("shred")  # a confirmation comes first, so no need to batch-wait
             if items:
@@ -1721,6 +1748,12 @@ class App(tk.Tk):
                     self.guard_page.handle(kind, payload)
                 elif kind == "shred_done":
                     self._on_shred_done(payload)
+                elif kind.startswith("breach_"):
+                    self.breach_page.handle(kind, payload)
+                elif kind.startswith("startup_"):
+                    self.startup_page.handle(kind, payload)
+                elif kind.startswith("report_"):
+                    self.report_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
@@ -1773,6 +1806,15 @@ def main():
         agent.main()
         return
     crashlog.install("window")
+    if context_menu.SANDBOX_FLAG in sys.argv:  # right-click "Open safely in Sandbox": no main window needed
+        index = sys.argv.index(context_menu.SANDBOX_FLAG)
+        if index + 1 < len(sys.argv):
+            i18n.set_language(settings.load().get("language"))
+            root = tk.Tk()
+            root.withdraw()
+            open_in_sandbox(sys.argv[index + 1])
+            root.destroy()
+        return
     for flag, kind in ((context_menu.FLAG, "scan"), (context_menu.SHRED_FLAG, "shred")):  # right-click menu
         if flag in sys.argv:
             index = sys.argv.index(flag)
