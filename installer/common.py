@@ -19,6 +19,9 @@ APP_SUBDIR = "app"  # the --onedir build's folder, so its DLLs don't clutter INS
 APP_EXE_NAME = "Sentinel.exe"
 UNINSTALL_EXE_NAME = "Uninstall.exe"
 ICON_NAME = "icon.ico"
+BROWSER_NAME = "Sentinel Browser"
+BROWSER_SUBDIR = "browser"          # Sentinel Browser's own --onedir build
+BROWSER_EXE_NAME = "SentinelBrowser.exe"
 
 START_MENU_DIR = (
     Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"

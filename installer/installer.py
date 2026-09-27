@@ -14,6 +14,9 @@ from common import (
     APP_EXE_NAME,
     APP_NAME,
     APP_SUBDIR,
+    BROWSER_EXE_NAME,
+    BROWSER_NAME,
+    BROWSER_SUBDIR,
     ICON_NAME,
     INSTALL_DIR,
     LEGACY_DESKTOP_DIR,
@@ -90,7 +93,7 @@ class SetupWizard(tk.Tk):
             self.withdraw()
         i18n.set_language(saved_language())  # a reinstall keeps the language already chosen
         self.update_mode = update_mode
-        self.geometry("500x500")
+        self.geometry("500x530")
         self.resizable(False, False)
         self.configure(bg=BG)
         try:
@@ -102,6 +105,7 @@ class SetupWizard(tk.Tk):
         self.desktop_shortcut_var = tk.BooleanVar(value=True)
         self.launch_after_var = tk.BooleanVar(value=True)
         self.autostart_var = tk.BooleanVar(value=True)
+        self.browser_var = tk.BooleanVar(value=True)
 
         self.container = ttk.Frame(self, padding=28)
         self.container.pack(fill="both", expand=True)
@@ -109,6 +113,7 @@ class SetupWizard(tk.Tk):
             # Keep whatever the user chose last time; ask nothing.
             self.desktop_shortcut_var.set((desktop_dir() / f"{APP_NAME}.lnk").exists())
             self.autostart_var.set(_startup_entry_exists())
+            self.browser_var.set((INSTALL_DIR / BROWSER_SUBDIR / BROWSER_EXE_NAME).exists())  # keep the choice
             self._build_update_page()
             self.after(400, self._run_update)
         else:
@@ -137,7 +142,7 @@ class SetupWizard(tk.Tk):
                 return
             messagebox.showerror(t("setup_title"), t("setup_failed", error=e))
             self.update_mode = False
-            self.geometry("500x500")
+            self.geometry("500x530")
             self._build_welcome_page()  # fall back to the normal installer so the user can retry
             return
         self.launch_after_var.set(True)
@@ -178,7 +183,10 @@ class SetupWizard(tk.Tk):
         tk.Label(card, text=t("setup_location", path=INSTALL_DIR), bg=CARD, fg=TEXT_MUTED,
                  font=FONT_SMALL, justify="left", wraplength=410).pack(anchor="w", pady=(10, 0))
 
-        for text, var, pady in ((t("setup_desktop"), self.desktop_shortcut_var, (20, 4)),
+        options = [(t("setup_desktop"), self.desktop_shortcut_var, (20, 4))]
+        if (payload_dir() / BROWSER_SUBDIR).is_dir():
+            options.append((t("setup_browser"), self.browser_var, (0, 4)))
+        for text, var, pady in (*options,
                                 (t("setup_autostart"), self.autostart_var, (0, 4)),
                                 (t("setup_launch"), self.launch_after_var, (0, 0))):
             ttk.Checkbutton(self.container, text=text, variable=var,
@@ -225,9 +233,11 @@ class SetupWizard(tk.Tk):
         # both the window and the background agent (same exe), then waits for
         # Windows to finish tearing them down; killed processes keep their exe
         # locked for a moment after taskkill returns.
-        subprocess.run(["taskkill", "/IM", APP_EXE_NAME, "/F"], capture_output=True, check=False,
-                       creationflags=0x08000000)
+        for image in (APP_EXE_NAME, BROWSER_EXE_NAME):  # an open Sentinel Browser locks its files too
+            subprocess.run(["taskkill", "/IM", image, "/F"], capture_output=True, check=False,
+                           creationflags=0x08000000)
         self._wait_for_exit(APP_EXE_NAME)
+        self._wait_for_exit(BROWSER_EXE_NAME)
         app_exe = INSTALL_DIR / APP_SUBDIR / APP_EXE_NAME
         icon = INSTALL_DIR / ICON_NAME
         uninstall_exe = INSTALL_DIR / UNINSTALL_EXE_NAME
@@ -260,6 +270,8 @@ class SetupWizard(tk.Tk):
             else:
                 desktop_link.unlink(missing_ok=True)
 
+            self._install_browser(src, icon)
+
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, REG_RUN_KEY) as key:
                 if self.autostart_var.get():
                     winreg.SetValueEx(key, REG_RUN_VALUE, 0, winreg.REG_SZ, f'"{app_exe}" --agent')
@@ -277,6 +289,24 @@ class SetupWizard(tk.Tk):
                 except OSError:
                     pass
             raise
+
+    def _install_browser(self, src: Path, icon: Path):
+        """Sentinel Browser: its own folder and shortcuts, or removes them if it's been unticked."""
+        browser_dir = INSTALL_DIR / BROWSER_SUBDIR
+        links = [START_MENU_DIR / f"{BROWSER_NAME}.lnk", desktop_dir() / f"{BROWSER_NAME}.lnk"]
+        if self.browser_var.get() and (src / BROWSER_SUBDIR).is_dir():
+            self._status(t("setup_browser_copying"))
+            self._copy_with_retry(lambda: shutil.copytree(src / BROWSER_SUBDIR, browser_dir, dirs_exist_ok=True))
+            exe = browser_dir / BROWSER_EXE_NAME
+            create_shortcut(links[0], exe, browser_dir, icon, description="Private browsing protected by Sentinel")
+            if self.desktop_shortcut_var.get():
+                create_shortcut(links[1], exe, browser_dir, icon, description="Private browsing protected by Sentinel")
+            else:
+                links[1].unlink(missing_ok=True)
+        else:
+            for link in links:
+                link.unlink(missing_ok=True)
+            shutil.rmtree(browser_dir, ignore_errors=True)
 
     @staticmethod
     def _wait_for_exit(image_name, timeout=20.0):

@@ -16,3 +16,6 @@ test_files/
 
 # Installers are published as release assets, not committed
 /SentinelSetup.exe
+
+# WebView2 SDK DLLs (downloaded by build_installer.ps1)
+browser/lib/

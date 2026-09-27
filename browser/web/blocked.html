@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Blocked</title>
+<style>
+:root { --bg: #0b1120; --card: #151f33; --line: #24324d; --text: #e7ecf5; --muted: #8b97ad; --accent: #3b82f6; --bad: #ef4444; --warn: #f59e0b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 15px "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+body { display: grid; place-items: center; padding: 40px 20px;
+  background-image: radial-gradient(ellipse 60% 45% at 50% 0%, var(--glow), transparent 70%); }
+.card { width: min(620px, 100%); background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--tone); border-radius: 18px; padding: 34px 36px; box-shadow: 0 30px 80px -40px #000; }
+.icon { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--glow); }
+.icon svg { width: 34px; height: 34px; stroke: var(--tone); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+h1 { margin: 18px 0 8px; font: 700 26px "Segoe UI Variable Display", "Segoe UI", sans-serif; }
+p { color: var(--muted); line-height: 1.55; margin: 0 0 10px; }
+.why { color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 16px 0; }
+.url { font: 13px Consolas, monospace; color: var(--muted); word-break: break-all; }
+.buttons { display: flex; align-items: center; gap: 18px; margin-top: 24px; flex-wrap: wrap; }
+button { height: 42px; padding: 0 22px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: 600 14.5px "Segoe UI", sans-serif; cursor: pointer; }
+.risk { color: var(--muted); font-size: 13px; text-decoration: underline; cursor: pointer; background: none; border: 0; padding: 0; height: auto; font-weight: 400; }
+.by { margin-top: 26px; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12.5px; }
+.by img { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon"><svg viewBox="0 0 24 24" id="glyph"></svg></div>
+  <h1 id="title"></h1>
+  <p id="text"></p>
+  <div class="why" id="why"></div>
+  <div class="url" id="url"></div>
+  <div class="buttons"><button id="back"></button><button class="risk" id="risk"></button></div>
+  <div class="by"><img src="shield.png" alt=""><span id="by"></span></div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const send = m => chrome.webview.postMessage(JSON.stringify(m));
+let data = {};
+try { data = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1).replace(/-/g, "+").replace(/_/g, "/"))))); } catch (_) {}
+const T = data.strings || {};
+const blocked = data.kind === "blocked";
+document.documentElement.style.setProperty("--tone", blocked ? "var(--bad)" : "var(--warn)");
+document.documentElement.style.setProperty("--glow", blocked ? "rgba(239,68,68,.16)" : "rgba(245,158,11,.14)");
+$("glyph").innerHTML = blocked ? '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 9l6 6M15 9l-6 6"/>'
+                               : '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/>';
+document.title = blocked ? (T.page_blocked_tab || "Blocked") : (T.page_nohttps_tab || "Not secure");
+$("title").textContent = blocked ? T.page_blocked_title : T.page_nohttps_title;
+$("text").textContent = blocked ? T.page_blocked_text : T.page_nohttps_text;
+$("why").textContent = blocked ? (data.reason || "") : (data.host || "");
+$("why").hidden = !$("why").textContent;
+$("url").textContent = data.url || "";
+$("back").textContent = T.page_back;
+$("risk").textContent = blocked ? T.page_proceed : T.page_http;
+$("by").textContent = T.page_by;
+$("back").onclick = () => send({cmd: "back"});
+$("risk").onclick = () => send({cmd: blocked ? "proceed" : "http", url: data.url});
+</script>
+</body>
+</html>

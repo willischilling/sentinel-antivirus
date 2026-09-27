@@ -174,6 +174,18 @@ A Tools tab, in sections (Accounts, Privacy, Speed & cleanup, Files & browser, R
 - **Open in Sandbox.** Opens a file inside [Windows Sandbox](https://learn.microsoft.com/windows/security/application-security/application-isolation/windows-sandbox/), a throwaway copy of Windows that's wiped when closed, from the Tools tab or right-click **Open safely in Sandbox**. Only a copy of the file is shared, read-only, and the sandbox gets no internet (unless you allow it), clipboard, microphone, camera or printer. Windows Sandbox comes with Pro, Enterprise and Education; if it's off, the page turns it on (admin prompt, then a restart).
 - **Weekly report.** Once a week the agent builds a summary of the last 7 days (threats found and quarantined, new Wi-Fi devices, apps that used the camera or mic, dangerous links caught, browser settings, ransomware shield blocks) with the security score compared to the week before, and pops up with **Open report**. The last 12 are kept locally.
 
+### Sentinel Browser
+A separate private browser, installed alongside Sentinel when you tick **Also install Sentinel Browser** in the installer (it gets its own Start Menu and desktop shortcut).
+
+- **Engine:** Microsoft Edge's [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/), which ships with Windows 10/11 and is kept patched by Microsoft. Sentinel Browser is the window, the tabs and the protection around it; the part that renders web pages is Microsoft's.
+- **Private by default:** every window gets a fresh, temporary InPrivate profile that's deleted when it closes. No history, cookies, cache, passwords or form data are kept. Searches go to DuckDuckGo.
+- **Dangerous sites blocked:** every page and frame is checked with the same lists and look-alike checks as Ask Sentinel and link guard, plus Microsoft SmartScreen. A match shows Sentinel's warning page, with **Go back to safety** (and a small "open anyway" link).
+- **Ads and trackers blocked:** requests to [Peter Lowe's ad and tracking server list](https://pgl.yoyo.org/adservers/) (about 3,500 servers, refreshed weekly) and a few big trackers are blocked, except the site's own servers, so logins and checkouts keep working. The shield button shows the count for the page and the session.
+- **HTTPS-only:** plain `http://` addresses are upgraded; if a site has no secure version, a warning page lets you decide.
+- **Downloads scanned:** every download is scanned by Sentinel's full scanner before it can be opened; threats go straight to quarantine.
+- **Pop-ups blocked:** windows a page opens by itself are blocked; links you click open in a new tab.
+- **How it's built:** WinForms through [pythonnet](https://pythonnet.github.io/), with the tab strip, toolbar and panels as HTML pages talking to Python over `postMessage`. Messages from web pages are only accepted from Sentinel's own pages. The WebView2 SDK comes from NuGet, pinned and checked by SHA-256 at build time.
+
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
 - A scanner for Downloads, Desktop, Documents, **all drives** or any folder, with an animated progress ring and a **Stop** button. A stopped scan keeps what it found.

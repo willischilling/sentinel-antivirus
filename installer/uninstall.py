@@ -17,7 +17,7 @@ from pathlib import Path
 from tkinter import messagebox
 
 from common import (
-    APP_EXE_NAME, APP_NAME, INSTALL_DIR, LEGACY_DESKTOP_DIR, REG_RUN_KEY, REG_RUN_VALUE,
+    APP_EXE_NAME, APP_NAME, BROWSER_EXE_NAME, BROWSER_NAME, INSTALL_DIR, LEGACY_DESKTOP_DIR, REG_RUN_KEY, REG_RUN_VALUE,
     REG_UNINSTALL_KEY, START_MENU_DIR, desktop_dir, saved_language,
 )
 from core import i18n
@@ -48,15 +48,17 @@ def step(name, action) -> bool:
 
 def kill_running_app():
     # Ends both the window and the background protection (same exe).
-    subprocess.run(["taskkill", "/IM", APP_EXE_NAME, "/F"], capture_output=True, check=False,
-                   creationflags=CREATE_NO_WINDOW)
+    for image in (APP_EXE_NAME, BROWSER_EXE_NAME):
+        subprocess.run(["taskkill", "/IM", image, "/F"], capture_output=True, check=False,
+                       creationflags=CREATE_NO_WINDOW)
     time.sleep(1)  # give Windows a moment to release the files
 
 
 def remove_shortcuts():
-    links = [START_MENU_DIR / f"{APP_NAME}.lnk", LEGACY_DESKTOP_DIR / f"{APP_NAME}.lnk"]
+    links = [START_MENU_DIR / f"{APP_NAME}.lnk", LEGACY_DESKTOP_DIR / f"{APP_NAME}.lnk",
+             START_MENU_DIR / f"{BROWSER_NAME}.lnk"]
     try:
-        links.append(desktop_dir() / f"{APP_NAME}.lnk")
+        links += [desktop_dir() / f"{APP_NAME}.lnk", desktop_dir() / f"{BROWSER_NAME}.lnk"]
     except OSError:
         log("could not resolve the Desktop folder; using the legacy location only")
     for link in links:

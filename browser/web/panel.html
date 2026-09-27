@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sentinel Browser panel</title>
+<style>
+:root { --bg: #0b1120; --card: #151f33; --hover: #1b2842; --line: #24324d; --text: #e7ecf5; --muted: #8b97ad;
+  --accent: #3b82f6; --good: #22c55e; --warn: #f59e0b; --bad: #ef4444; --private: #a78bfa; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--card); color: var(--text); overflow: hidden;
+  font: 13px "Segoe UI Variable Text", "Segoe UI", sans-serif; user-select: none; -webkit-user-select: none; }
+body { border: 1px solid var(--line); border-radius: 0; }
+.wrap { padding: 16px; height: 100%; display: flex; flex-direction: column; }
+svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.head { display: flex; align-items: center; gap: 12px; }
+.head img { width: 40px; height: 40px; }
+.head b { font-size: 15px; display: block; }
+.head small { color: var(--muted); font-size: 12px; display: block; margin-top: 2px; word-break: break-all; }
+.good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+.rows { margin-top: 14px; border-top: 1px solid var(--line); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.row span:first-child { color: var(--muted); }
+.row b { font-weight: 600; }
+.switch { width: 36px; height: 20px; border-radius: 99px; background: var(--line); position: relative; cursor: pointer; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch.on { background: var(--accent); } .switch.on::after { left: 19px; }
+.note { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.45; display: flex; gap: 8px; }
+.note svg { color: var(--private); margin-top: 1px; }
+.link { color: var(--accent); cursor: pointer; font-weight: 600; margin-top: auto; padding-top: 10px; }
+.item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.item .meta { flex: 1; min-width: 0; }
+.item .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .status { font-size: 12px; margin-top: 2px; color: var(--muted); }
+.item .acts { display: flex; gap: 10px; margin-top: 4px; font-size: 12px; }
+.item .acts span { color: var(--accent); cursor: pointer; }
+.bar { height: 4px; background: var(--line); border-radius: 99px; margin-top: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.list { overflow-y: auto; flex: 1; }
+.empty { color: var(--muted); padding: 24px 0; text-align: center; }
+.menu .mi { display: flex; align-items: center; gap: 12px; padding: 9px 8px; border-radius: 8px; cursor: pointer; }
+.menu .mi:hover { background: var(--hover); }
+.menu .mi.danger { color: var(--bad); }
+.menu .sep { height: 1px; background: var(--line); margin: 6px 0; }
+.zoom { margin-left: auto; display: flex; gap: 6px; }
+.zoom span { width: 26px; height: 24px; border-radius: 6px; background: var(--hover); display: grid; place-items: center; }
+h3 { margin: 0 0 6px; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="root"></div>
+<script>
+const send = msg => chrome.webview.postMessage(JSON.stringify(msg));
+let T = {}, S = null;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const mb = n => (n / 1048576).toFixed(n > 10485760 ? 0 : 1) + " MB";
+const I = {
+  mask: '<svg viewBox="0 0 24 24"><path d="M3 11c3-4 15-4 18 0M6 11l1 7h3l2-3 2 3h3l1-7"/></svg>',
+  plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  shield: '<svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>',
+  fire: '<svg viewBox="0 0 24 24"><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-6 2 1 3 3 3 3"/></svg>',
+  zoom: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>',
+};
+
+function shield() {
+  const v = S.verdict, sentinel = S.sentinel_page;
+  const cls = v === "blocked" ? "bad" : v === "caution" ? "warn" : "good";
+  const title = sentinel ? T.brw_site_sentinel : v === "blocked" ? T.brw_site_blocked : v === "caution" ? T.brw_site_caution : T.brw_site_safe;
+  const sub = sentinel ? "" : (S.reason || S.host);
+  const sw = (name, on) => `<div class="switch ${on ? "on" : ""}" data-toggle="${name}"></div>`;
+  return `<div class="head"><img src="shield.png" alt=""><div><b class="${cls}">${esc(title)}</b><small>${esc(sub)}</small></div></div>
+  <div class="rows">
+    <div class="row"><span>${esc(T.brw_trackers_page)}</span><b>${S.opts.block_trackers ? S.trackers : "—"}</b></div>
+    <div class="row"><span>${esc(T.brw_session)}</span><b>${esc(T.brw_session_stats.replace("{trackers}", S.stats.trackers).replace("{sites}", S.stats.blocked).replace("{popups}", S.stats.popups))}</b></div>
+    <div class="row"><span>${esc(T.brw_opt_trackers)}</span>${sw("block_trackers", S.opts.block_trackers)}</div>
+    <div class="row"><span>${esc(T.brw_opt_https)}</span>${sw("https_only", S.opts.https_only)}</div>
+  </div>
+  <div class="note">${I.mask}<span>${esc(T.brw_private_note)}</span></div>
+  <div class="link" data-cmd="open_sentinel">${esc(T.brw_open_sentinel)} ›</div>`;
+}
+
+function downloads() {
+  if (!S.downloads.length) return `<h3>${esc(T.brw_downloads)}</h3><div class="empty">${esc(T.brw_dl_none)}</div>`;
+  const items = S.downloads.map(d => {
+    let status = "", acts = "", bar = "";
+    if (d.state === "downloading") {
+      const pct = d.total ? Math.round(100 * d.received / d.total) : 0;
+      status = d.total ? `${mb(d.received)} / ${mb(d.total)}` : mb(d.received);
+      bar = `<div class="bar"><i style="width:${pct}%"></i></div>`;
+    } else if (d.state === "scanning") status = `<span>${esc(T.brw_dl_scanning)}</span>`;
+    else if (d.state === "safe") { status = `<span class="good">✓ ${esc(T.brw_dl_safe)}</span>`; acts = `<span data-open="${d.id}">${esc(T.brw_dl_open)}</span><span data-show="${d.id}">${esc(T.brw_dl_folder)}</span>`; }
+    else if (d.state === "threat") status = `<span class="bad">${esc(T.brw_dl_threat.replace("{name}", d.detail || ""))}</span>`;
+    else if (d.state === "suspicious") { status = `<span class="warn">${esc(T.brw_dl_suspicious)}</span>`; acts = `<span data-show="${d.id}">${esc(T.brw_dl_folder)}</span>`; }
+    else if (d.state === "unscanned") { status = `<span class="warn">${esc(T.brw_dl_unscanned)}</span>`; acts = `<span data-show="${d.id}">${esc(T.brw_dl_folder)}</span>`; }
+    else status = `<span class="bad">${esc(T.brw_dl_failed)}</span>`;
+    return `<div class="item"><div class="meta"><div class="name" title="${esc(d.name)}">${esc(d.name)}</div><div class="status">${status}</div>${bar}<div class="acts">${acts}</div></div></div>`;
+  }).join("");
+  return `<h3>${esc(T.brw_downloads)}</h3><div class="note" style="margin:0 0 6px">${I.shield}<span>${esc(T.brw_dl_note)}</span></div><div class="list">${items}</div>`;
+}
+
+function menu() {
+  const sw = (name, on) => `<div class="switch ${on ? "on" : ""}" data-toggle="${name}" style="margin-left:auto"></div>`;
+  return `<div class="menu">
+    <div class="mi" data-cmd="new_tab">${I.plus}${esc(T.brw_new_tab)}<span style="margin-left:auto;color:var(--muted)">Ctrl+T</span></div>
+    <div class="mi">${I.zoom}${esc(T.brw_zoom)}<div class="zoom"><span data-zoom="-0.1">−</span><span data-zoom="0.1">+</span></div></div>
+    <div class="sep"></div>
+    <div class="mi">${I.shield}${esc(T.brw_opt_trackers)}${sw("block_trackers", S.opts.block_trackers)}</div>
+    <div class="mi">${I.shield}${esc(T.brw_opt_https)}${sw("https_only", S.opts.https_only)}</div>
+    <div class="mi" data-cmd="open_sentinel">${I.shield}${esc(T.brw_open_sentinel)}</div>
+    <div class="sep"></div>
+    <div class="mi danger" data-cmd="wipe">${I.fire}${esc(T.brw_wipe)}</div>
+    <div class="note">${I.mask}<span>${esc(T.brw_private_note)}</span></div>
+  </div>`;
+}
+
+function render() {
+  if (!S || !S.panel) return;
+  document.getElementById("root").innerHTML = {shield, downloads, menu}[S.panel]();
+}
+
+chrome.webview.addEventListener("message", e => {
+  if (e.data.type === "strings") { T = e.data.strings; render(); }
+  else if (e.data.type === "state") { S = e.data; render(); }
+});
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-toggle],[data-cmd],[data-open],[data-show],[data-zoom]");
+  if (!el) return;
+  if (el.dataset.toggle) send({cmd: "toggle", name: el.dataset.toggle});
+  else if (el.dataset.cmd) { send({cmd: el.dataset.cmd}); if (el.dataset.cmd === "new_tab") send({cmd: "close_panel"}); }
+  else if (el.dataset.open) send({cmd: "open_download", id: +el.dataset.open});
+  else if (el.dataset.show) send({cmd: "show_download", id: +el.dataset.show});
+  else if (el.dataset.zoom) send({cmd: "zoom", step: +el.dataset.zoom});
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") send({cmd: "close_panel"}); });
+document.addEventListener("contextmenu", e => e.preventDefault());
+send({cmd: "panel_ready"});
+</script>
+</body>
+</html>

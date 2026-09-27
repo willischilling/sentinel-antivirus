@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New tab</title>
+<style>
+:root { --bg: #0b1120; --card: #151f33; --hover: #1b2842; --line: #24324d; --text: #e7ecf5; --muted: #8b97ad;
+  --accent: #3b82f6; --good: #22c55e; --private: #a78bfa; }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font: 15px "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+body { display: flex; flex-direction: column; align-items: center; padding: 11vh 20px 40px;
+  background-image: radial-gradient(ellipse 70% 45% at 50% 0%, rgba(59,130,246,.16), transparent 70%),
+    linear-gradient(rgba(139,151,173,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(139,151,173,.05) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand img { width: 56px; height: 56px; }
+.brand h1 { margin: 0; font: 800 30px "Segoe UI Variable Display", "Segoe UI", sans-serif; letter-spacing: .02em; }
+.brand h1 span { color: var(--muted); font-weight: 600; }
+.pill { margin-top: 14px; display: inline-flex; align-items: center; gap: 8px; color: var(--private); font-size: 13px; font-weight: 600;
+  padding: 5px 14px; border-radius: 99px; background: rgba(167,139,250,.12); }
+form { margin-top: 30px; width: min(620px, 100%); display: flex; align-items: center; gap: 10px; padding: 0 8px 0 20px; height: 54px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 99px; box-shadow: 0 20px 50px -30px rgba(0,0,0,.8); }
+form:focus-within { border-color: var(--accent); }
+form svg { width: 18px; height: 18px; stroke: var(--muted); fill: none; stroke-width: 2; stroke-linecap: round; }
+input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 16px; }
+input::placeholder { color: var(--muted); }
+button { height: 40px; padding: 0 20px; border: 0; border-radius: 99px; background: var(--accent); color: #fff; font: 600 14px inherit; cursor: pointer; font-family: inherit; }
+.engine { margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.tiles { margin-top: 34px; display: grid; grid-template-columns: repeat(6, 92px); gap: 14px; }
+.tile { display: flex; flex-direction: column; align-items: center; gap: 8px; text-decoration: none; color: var(--text); font-size: 12.5px; padding: 12px 4px; border-radius: 12px; }
+.tile:hover { background: var(--card); }
+.tile i { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-style: normal; font-weight: 700; font-size: 19px; color: #fff; font-family: "Segoe UI", sans-serif; }
+.stats { margin-top: 38px; display: grid; grid-template-columns: repeat(3, 190px); gap: 14px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.stat b { font: 800 26px "Segoe UI Variable Display", "Segoe UI", sans-serif; display: block; }
+.stat span { color: var(--muted); font-size: 12.5px; }
+.stat.good b { color: var(--good); }
+.foot { margin-top: 34px; max-width: 600px; text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+@media (max-width: 720px) { .tiles { grid-template-columns: repeat(3, 92px); } .stats { grid-template-columns: 1fr; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="brand"><img src="shield.png" alt=""><h1>SENTINEL <span id="word">Browser</span></h1></div>
+<div class="pill" id="pill">PRIVATE</div>
+<form id="f"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
+  <input id="q" autofocus autocomplete="off" spellcheck="false"><button id="go">Search</button></form>
+<div class="engine" id="engine"></div>
+<div class="tiles" id="tiles"></div>
+<div class="stats">
+  <div class="stat good"><b id="s-trackers">0</b><span id="l-trackers"></span></div>
+  <div class="stat good"><b id="s-sites">0</b><span id="l-sites"></span></div>
+  <div class="stat good"><b id="s-popups">0</b><span id="l-popups"></span></div>
+</div>
+<div class="foot" id="foot"></div>
+<script>
+const $ = id => document.getElementById(id);
+const send = m => chrome.webview.postMessage(JSON.stringify(m));
+const SITES = [["YouTube", "https://www.youtube.com", "#ef4444"], ["Google", "https://www.google.com", "#3b82f6"],
+  ["Wikipedia", "https://www.wikipedia.org", "#64748b"], ["Roblox", "https://www.roblox.com", "#111827"],
+  ["Discord", "https://discord.com/app", "#5865f2"], ["Gmail", "https://mail.google.com", "#ea4335"]];
+for (const [name, url, color] of SITES) {
+  const a = document.createElement("a"); a.className = "tile"; a.href = url;
+  a.innerHTML = `<i style="background:${color}">${name[0]}</i><span>${name}</span>`;
+  $("tiles").append(a);
+}
+$("f").addEventListener("submit", e => { e.preventDefault(); send({cmd: "search", q: $("q").value}); });
+chrome.webview.addEventListener("message", e => {
+  const m = e.data;
+  if (m.type !== "stats") return;
+  const T = m.strings || {};
+  document.title = T.brw_tab_new || "New tab";
+  $("word").textContent = T.brw_word || "Browser";
+  $("pill").textContent = T.brw_start_pill || "";
+  $("q").placeholder = T.brw_start_search || "";
+  $("go").textContent = T.brw_start_go || "Search";
+  $("engine").textContent = T.brw_start_engine || "";
+  $("l-trackers").textContent = T.brw_start_trackers || "";
+  $("l-sites").textContent = T.brw_start_sites || "";
+  $("l-popups").textContent = T.brw_start_popups || "";
+  $("foot").textContent = T.brw_private_note || "";
+  $("s-trackers").textContent = m.trackers; $("s-sites").textContent = m.blocked; $("s-popups").textContent = m.popups;
+});
+send({cmd: "stats"});
+</script>
+</body>
+</html>

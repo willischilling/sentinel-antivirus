@@ -77,6 +77,7 @@ class ToolsPage(tk.Frame):
                 ("power", t("startup_title"), t("tools_startup_desc"), self._startup_status(), "startup"),
             ]),
             ("tools_sec_files", [
+                ("web", t("browser_title"), t("tools_browser_desc"), self._browser_status(), "browser"),
                 ("puzzle", t("ext_title"), t("tools_ext_desc"), self._ext_status(), "extensions"),
                 ("delete", t("shred_title"), t("tools_shred_desc"), (t("tools_shred_status"), C.TEXT_MUTED), "shred"),
                 ("shield", t("sandbox_title"), t("tools_sandbox_desc"), self._sandbox_status(), "sandbox"),
@@ -112,7 +113,14 @@ class ToolsPage(tk.Frame):
                     anchor="sw", side="bottom", fill="x", pady=(6, 0))
 
     def _open(self, page):
-        self.app._show_page(page)
+        if page == "browser":
+            open_browser()
+        else:
+            self.app._show_page(page)
+
+    @staticmethod
+    def _browser_status():
+        return (t("tools_browser_open"), C.ACCENT) if browser_command() else (t("tools_browser_missing"), C.TEXT_MUTED)
 
     def _privacy_status(self):
         try:
@@ -201,3 +209,23 @@ class ToolsPage(tk.Frame):
     def handle(self, kind, payload):
         if self.winfo_exists():
             self._render()
+
+
+def browser_command() -> list[str] | None:
+    """How to start Sentinel Browser: the installed exe next to Sentinel's folder, or from source."""
+    import sys
+    from pathlib import Path
+
+    if getattr(sys, "frozen", False):
+        exe = Path(sys.executable).resolve().parent.parent / "browser" / "SentinelBrowser.exe"
+        return [str(exe)] if exe.exists() else None
+    script = Path(__file__).resolve().parent / "browser_main.py"
+    return [sys.executable, str(script)] if script.exists() else None
+
+
+def open_browser(url: str | None = None):
+    import subprocess
+
+    command = browser_command()
+    if command:
+        subprocess.Popen(command + ([url] if url else []))
