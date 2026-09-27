@@ -346,6 +346,18 @@ footer p { margin: 0; max-width: 70ch; }
 .ctx-menu div { padding: 6px 10px; border-radius: 5px; color: var(--muted); }
 .ctx-menu div.hl { background: var(--accent-strong); color: #fff; }
 .more-grid.two { grid-template-columns: repeat(2, 1fr); }
+.mock input { width: 100%; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 13.5px "IBM Plex Sans", sans-serif; }
+.mock form { display: flex; gap: 8px; }
+.mock form input { flex: 1; }
+.breach-out { margin-top: 10px; font-size: 13.5px; min-height: 20px; }
+.breach-out b.bad { color: var(--bad); } .breach-out b.good { color: var(--good); }
+.breach-out .names { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.sw-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+.sw-row + .sw-row { border-top: 1px solid var(--line); }
+.mini-sw { width: 34px; height: 20px; border-radius: 99px; background: var(--line); border: 0; position: relative; cursor: pointer; flex: none; }
+.mini-sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+.mini-sw[aria-pressed="true"] { background: var(--accent); }
+.mini-sw[aria-pressed="true"]::after { left: 17px; }
 .priv-alert { border-left: 4px solid var(--bad); background: var(--card); border-radius: 8px; padding: 10px 12px; transition: opacity .3s; }
 .priv-alert b { color: var(--bad); font-size: 13px; }
 .priv-alert .acts { display: flex; gap: 6px; margin-top: 8px; }
@@ -762,7 +774,33 @@ footer p { margin: 0; max-width: 70ch; }
         <h3>Updates itself</h3>
         <p>New versions install in the background while the window is closed and no game is running. Every download is checked against GitHub's checksum before it runs.</p>
         <div class="mock">
-          <div class="mock-row"><span>Sentinel updated to 1.13.0<br><span class="muted">installed in the background</span></span><span class="mini-pill good">DONE</span></div>
+          <div class="mock-row"><span>Sentinel updated to 1.14.0<br><span class="muted">installed in the background</span></span><span class="mini-pill good">DONE</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="more-grid tools-grid">
+      <div class="more-card">
+        <h3>Startup apps</h3>
+        <p>Everything that starts with Windows, who made it, and which ones are safe to turn off for a faster boot. Same switch as Task Manager, so nothing gets deleted.</p>
+        <div class="mock" id="st-mock">
+          <div class="sw-row"><span>Discord <span class="mini-pill good">SAFE TO TURN OFF</span></span><button class="mini-sw" aria-pressed="true" aria-label="Discord starts with Windows"></button></div>
+          <div class="sw-row"><span>Steam <span class="mini-pill good">SAFE TO TURN OFF</span></span><button class="mini-sw" aria-pressed="true" aria-label="Steam starts with Windows"></button></div>
+          <div class="sw-row"><span>Windows Security <span class="mini-pill acc">KEEP ON</span></span><button class="mini-sw" aria-pressed="true" aria-label="Windows Security starts with Windows"></button></div>
+        </div>
+      </div>
+      <div class="more-card">
+        <h3>Open in Sandbox</h3>
+        <p>Not sure about a file? Right-click, Open safely in Sandbox. It runs in a throwaway copy of Windows with no internet and no access to your files, and everything is wiped when you close it.</p>
+        <div class="mock">
+          <div class="ctx-menu"><div>Open</div><div>Scan with Sentinel</div><div class="hl">Open safely in Sandbox</div><div>Shred with Sentinel</div></div>
+        </div>
+      </div>
+      <div class="more-card">
+        <h3>Weekly report</h3>
+        <p>Once a week: threats found, new devices on your Wi-Fi, apps that used your camera, links it caught, and your security score against last week.</p>
+        <div class="mock">
+          <div class="mock-row"><span>Security score<br><span class="muted">up from 85 last week</span></span><span class="mini-pill good">95/100</span></div>
+          <div class="mock-row"><span class="muted">2 threats quarantined · 1 new device</span></div>
         </div>
       </div>
     </div>
@@ -806,6 +844,24 @@ footer p { margin: 0; max-width: 70ch; }
         <p>Catches anything forcing your browser's homepage, search engine or extensions ("Managed by your organization"), redirecting sites in the hosts file, or routing traffic through a proxy. One click puts it back.</p>
         <div class="mock">
           <div class="mock-row"><span>Chrome: search engine<br><span class="muted" id="guard-val">searchjack.xyz/?q=</span></span><button class="mini-btn" id="guard-undo" type="button">Undo</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="more-grid tools-grid two">
+      <div class="more-card">
+        <h3>Email breach check</h3>
+        <p>Try it: see which data breaches an email is in and whether passwords leaked. It asks <a href="https://xposedornot.com/">XposedOrNot</a>, a free breach index; the address is sent only to them and isn't stored here. The app shows what leaked in each one.</p>
+        <div class="mock">
+          <form id="br-form" autocomplete="off"><input type="email" id="br-input" placeholder="you@example.com" aria-label="Email to check" spellcheck="false"><button class="btn primary small" type="submit">Check</button></form>
+          <div class="breach-out" id="br-out" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="more-card">
+        <h3>Link guard</h3>
+        <p>Copy a scam link from Discord or a text and Sentinel warns you before you paste it: phishing lists, malware lists and fake brand sites like dlscord-gift.com. Nothing you copy is saved.</p>
+        <div class="mock">
+          <div class="mock-row"><span class="strike">dlscord-gift.com/claim</span><button class="mini-btn" id="lg-copy" type="button">Copy it</button></div>
+          <div class="priv-alert gone" id="lg-alert" style="margin-top:8px"><b>You copied a dangerous link</b><div class="muted">looks like Discord with letters changed</div></div>
         </div>
       </div>
     </div>
@@ -1173,6 +1229,32 @@ shieldSw.addEventListener("click", () => {
   const res = document.getElementById("shield-result");
   res.textContent = on ? "BLOCKED" : "ALLOWED"; res.className = "mini-pill " + (on ? "bad" : "warn");
 });
+
+// ---- email breach check (live, via XposedOrNot) ----
+document.getElementById("br-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const out = document.getElementById("br-out"), email = document.getElementById("br-input").value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { out.innerHTML = '<b class="bad">That doesn\'t look like an email.</b>'; return; }
+  out.textContent = "Checking...";
+  try {
+    const res = await fetch("https://api.xposedornot.com/v1/check-email/" + encodeURIComponent(email));
+    const data = res.status === 404 ? {} : await res.json();
+    const list = (data.breaches && data.breaches[0]) || [];
+    out.innerHTML = "";
+    const head = document.createElement("b");
+    if (!list.length) { head.className = "good"; head.textContent = "No known breaches for this email."; out.append(head); return; }
+    head.className = "bad"; head.textContent = `Found in ${list.length} breach${list.length === 1 ? "" : "es"}.`;
+    const names = document.createElement("div"); names.className = "names";
+    names.textContent = list.slice(0, 8).join(", ") + (list.length > 8 ? ` and ${list.length - 8} more` : "");
+    out.append(head, names);
+  } catch (_) { out.textContent = "Couldn't reach the breach service. Try again later."; }
+});
+// ---- link guard + startup demos ----
+document.getElementById("lg-copy").addEventListener("click", e => {
+  document.getElementById("lg-alert").classList.remove("gone"); e.target.textContent = "Copied"; e.target.disabled = true;
+});
+document.querySelectorAll("#st-mock .mini-sw").forEach(b => b.addEventListener("click", () =>
+  b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true")));
 
 // ---- privacy demos ----
 document.getElementById("priv-end").addEventListener("click", () => {
