@@ -345,6 +345,16 @@ footer p { margin: 0; max-width: 70ch; }
 .ctx-menu { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px; font-size: 13px; }
 .ctx-menu div { padding: 6px 10px; border-radius: 5px; color: var(--muted); }
 .ctx-menu div.hl { background: var(--accent-strong); color: #fff; }
+.more-grid.two { grid-template-columns: repeat(2, 1fr); }
+.priv-alert { border-left: 4px solid var(--bad); background: var(--card); border-radius: 8px; padding: 10px 12px; transition: opacity .3s; }
+.priv-alert b { color: var(--bad); font-size: 13px; }
+.priv-alert .acts { display: flex; gap: 6px; margin-top: 8px; }
+.priv-alert.gone { opacity: .35; }
+.dev-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.dev-row + .dev-row { border-top: 1px solid var(--line); }
+.dev-row .ip { margin-left: auto; font: 12px "IBM Plex Mono", monospace; color: var(--muted); }
+.dev-row.fresh { animation: in .4s ease-out; }
+@media (max-width: 960px) { .more-grid.two { grid-template-columns: 1fr; } }
 .mock { background: var(--panel); border-radius: 12px; padding: 14px; font-size: 13.5px; margin-top: auto; }
 .mock-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
 .mock-row + .mock-row { border-top: 1px solid var(--line); }
@@ -383,7 +393,9 @@ footer p { margin: 0; max-width: 70ch; }
 .pw-result.bad { color: var(--bad); } .pw-result.good { color: var(--good); } .pw-result.warn { color: var(--warn); }
 .pw-note { margin-top: 14px; font-size: 13px; color: var(--muted); }
 @media (max-width: 960px) { .sec-grid { grid-template-columns: 1fr; } }
-@media (max-width: 1120px) { .nav a.link[href^="https://github.com"], .nav a.link[href="#security"] { display: none; } }
+.nav .btn, .nav .contact { white-space: nowrap; flex: none; }
+@media (max-width: 1320px) { .nav { gap: 22px; } .nav a.link[href^="https://github.com"], .nav a.link[href="#security"] { display: none; } }
+@media (max-width: 1120px) { .nav a.link[href="#ask"], .nav a.link[href="#detection"] { display: none; } }
 @media (max-width: 420px) { .nav .btn.small { padding: 7px 10px; font-size: 13px; } .nav .brand span { display: none; } }
 
 @media (max-width: 960px) {
@@ -421,6 +433,7 @@ footer p { margin: 0; max-width: 70ch; }
     <a class="link" href="#firewall">Firewall</a>
     <a class="link" href="#security">Security</a>
     <a class="link" href="#tools">Tools</a>
+    <a class="link" href="#privacy">Privacy</a>
     <a class="link" href="reviews.html">Reviews</a>
     <a class="link" href="https://github.com/willischilling/sentinel-antivirus">GitHub</a>
     <div class="contact">
@@ -737,6 +750,65 @@ footer p { margin: 0; max-width: 70ch; }
         </div>
       </div>
     </div>
+    <div class="more-grid tools-grid two">
+      <div class="more-card">
+        <h3>File shredder</h3>
+        <p>Delete files and folders for good: each file is overwritten with random data before it's removed, so recovery tools can't bring it back. From the Tools tab or right-click, and it always asks first.</p>
+        <div class="mock">
+          <div class="ctx-menu"><div>Open</div><div>Scan with Sentinel</div><div class="hl">Shred with Sentinel</div><div>Properties</div></div>
+        </div>
+      </div>
+      <div class="more-card">
+        <h3>Updates itself</h3>
+        <p>New versions install in the background while the window is closed and no game is running. Every download is checked against GitHub's checksum before it runs.</p>
+        <div class="mock">
+          <div class="mock-row"><span>Sentinel updated to 1.13.0<br><span class="muted">installed in the background</span></span><span class="mini-pill good">DONE</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="privacy">
+  <div class="wrap">
+    <div class="split" style="margin-bottom:0">
+      <div>
+        <div class="kicker"><b>07</b> Privacy</div>
+        <h2>Who's watching, who's connected.</h2>
+      </div>
+      <p class="lede">Know the second an app turns on your camera or mic, see every device on your Wi-Fi, and catch anything quietly taking over your browser.</p>
+    </div>
+    <div class="more-grid">
+      <div class="more-card">
+        <h3>Camera &amp; mic alerts</h3>
+        <p>A popup the moment any app turns on your webcam or microphone, with who signed it and a button to end it. Plus a list of every app that used them recently.</p>
+        <div class="mock">
+          <div class="priv-alert" id="priv-alert">
+            <b>Your camera turned on</b>
+            <div style="font-weight:600;margin-top:4px">svc_update.exe</div>
+            <div class="muted">not signed by any publisher</div>
+            <div class="acts"><button class="mini-btn" id="priv-end" type="button" style="color:var(--bad)">End program</button><button class="mini-btn" type="button" id="priv-allow">Always allow</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="more-card">
+        <h3>Who's on my Wi-Fi</h3>
+        <p>Every phone, console, TV and gadget on your network, with its maker, a check of risky router settings, and a popup when a new device joins.</p>
+        <div class="mock" id="dev-mock">
+          <div class="dev-row"><span>Your router<br><span class="muted">Router</span></span><span class="ip">192.168.1.1</span></div>
+          <div class="dev-row"><span>Nintendo<br><span class="muted">Game console</span></span><span class="ip">.1.23</span></div>
+          <div class="dev-row"><span>Roku<br><span class="muted">TV</span></span><span class="ip">.1.40</span></div>
+          <button class="mini-btn" id="dev-join" type="button" style="margin-top:8px">Simulate a new device</button>
+        </div>
+      </div>
+      <div class="more-card">
+        <h3>Browser guard</h3>
+        <p>Catches anything forcing your browser's homepage, search engine or extensions ("Managed by your organization"), redirecting sites in the hosts file, or routing traffic through a proxy. One click puts it back.</p>
+        <div class="mock">
+          <div class="mock-row"><span>Chrome: search engine<br><span class="muted" id="guard-val">searchjack.xyz/?q=</span></span><button class="mini-btn" id="guard-undo" type="button">Undo</button></div>
+        </div>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -744,7 +816,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="split" style="margin-bottom:0">
       <div>
-        <div class="kicker"><b>07</b> Security Check</div>
+        <div class="kicker"><b>08</b> Security Check</div>
         <h2>One number for how safe you are.</h2>
       </div>
       <p class="lede">Sentinel scores your PC out of 100: its own protection, Windows Firewall, Defender, web protection, whether your apps are patched, and more. Anything missing comes first, with a Fix button.</p>
@@ -752,7 +824,7 @@ footer p { margin: 0; max-width: 70ch; }
     <div class="sec-grid">
       <div class="sec-card">
         <div class="sec-head">
-          <div class="sec-ring"><div><b>90</b><small>/100</small></div></div>
+          <div class="sec-ring"><div><b>91</b><small>/100</small></div></div>
           <div><div style="font-weight:600;font-size:18px">1 thing to fix</div><div style="color:var(--muted);font-size:14px">Each item adds points.</div></div>
         </div>
         <div class="sec-item"><span class="no">!</span><b>10 apps need updates</b><button class="mini-btn fixbtn" type="button">Fix</button></div>
@@ -780,7 +852,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="app-head">
       <div>
-        <div class="kicker"><b>08</b> The app</div>
+        <div class="kicker"><b>09</b> The app</div>
         <h2>Calm when it's quiet.<br>Loud when it matters.</h2>
       </div>
       <div class="seg" role="group" aria-label="App theme">
@@ -802,7 +874,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="protection">
   <div class="wrap">
-    <div class="kicker"><b>09</b> Real-time protection</div>
+    <div class="kicker"><b>10</b> Real-time protection</div>
     <h2>Five watchers.<br>One background agent.</h2>
     <p class="lede" style="margin:22px 0 48px">Protection runs as its own process, so closing or quitting the window doesn't stop it. If it was on when the PC shut down, it's back at the next sign-in.</p>
 
@@ -838,7 +910,7 @@ footer p { margin: 0; max-width: 70ch; }
 
 <section id="languages">
   <div class="wrap">
-    <div class="kicker"><b>10</b> Five languages</div>
+    <div class="kicker"><b>11</b> Five languages</div>
     <h2>Speaks your language.</h2>
     <p class="lede" style="margin-top:22px">Starts in your Windows display language and switches live — popups, tray menu, activity log, installer and uninstaller included. Dates and numbers follow local formats.</p>
     <div class="langs">
@@ -855,7 +927,7 @@ footer p { margin: 0; max-width: 70ch; }
   <div class="wrap">
     <div class="split" style="margin-bottom:0">
       <div>
-        <div class="kicker"><b>11</b> Honest limits</div>
+        <div class="kicker"><b>12</b> Honest limits</div>
         <h2>What it can't do.</h2>
       </div>
       <p class="lede">Sentinel is a portfolio project, not a replacement for Microsoft Defender. Keep Defender on. Here's exactly where the edges are.</p>
@@ -873,7 +945,7 @@ footer p { margin: 0; max-width: 70ch; }
 <section id="install">
   <div class="wrap install">
     <div>
-      <div class="kicker"><b>12</b> Install</div>
+      <div class="kicker"><b>13</b> Install</div>
       <h2>Two minutes,<br>no admin rights.</h2>
       <ol class="steps" style="margin-top:36px">
         <li><div><b>Download SentinelSetup.exe</b><span>From the latest GitHub release. Its SHA-256 is listed in the release notes.</span></div></li>
@@ -1100,6 +1172,27 @@ shieldSw.addEventListener("click", () => {
   document.getElementById("shield-sw-label").textContent = on ? "Ransomware shield is on" : "Ransomware shield is off";
   const res = document.getElementById("shield-result");
   res.textContent = on ? "BLOCKED" : "ALLOWED"; res.className = "mini-pill " + (on ? "bad" : "warn");
+});
+
+// ---- privacy demos ----
+document.getElementById("priv-end").addEventListener("click", () => {
+  const a = document.getElementById("priv-alert");
+  a.querySelector("b").textContent = "Program ended"; a.querySelector(".muted").textContent = "the camera is off again";
+  a.classList.add("gone");
+});
+document.getElementById("priv-allow").addEventListener("click", () => {
+  const a = document.getElementById("priv-alert");
+  a.querySelector(".muted").textContent = "won't alert again"; a.classList.add("gone");
+});
+document.getElementById("dev-join").addEventListener("click", e => {
+  const row = document.createElement("div"); row.className = "dev-row fresh";
+  row.innerHTML = '<span>Unknown device <span class="mini-pill warn">NEW</span><br><span class="muted">just joined</span></span><span class="ip">.1.57</span>';
+  document.getElementById("dev-mock").insertBefore(row, e.target);
+  e.target.remove();
+});
+document.getElementById("guard-undo").addEventListener("click", e => {
+  document.getElementById("guard-val").textContent = "back to Google";
+  e.target.textContent = "Undone"; e.target.disabled = true;
 });
 
 // ---- Ask Sentinel examples (real answers from the local AI during testing) ----
