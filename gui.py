@@ -16,15 +16,15 @@ from tkinter import filedialog, messagebox, ttk
 import launcher
 import single_instance
 from core import (
-    activity, app_update, assistant, autostart, database, i18n, paths, quarantine, scanner, schedule, settings,
-    signatures, threat_intel, usb,
+    activity, app_update, assistant, autostart, context_menu, database, i18n, paths, quarantine, recovery,
+    scan_requests, scanner, schedule, settings, signatures, threat_intel, usb,
 )
 from core.i18n import duration, number, plural, relative, t
 from core.version import VERSION
 import theme as C
 from theme import FONT, FONT_BOLD, FONT_HERO, FONT_LARGE, FONT_MONO, FONT_SMALL, FONT_TITLE
 from widgets import (
-    EmptyState, NavItem, Ring, RoundedCard, ToggleSwitch, icon_label, pill as rounded_pill, rounded_rect_image,
+    EmptyState, NavItem, Ring, RoundedCard, ScrollArea, ToggleSwitch, icon_label, pill as rounded_pill, rounded_rect_image,
     set_pill_style,
 )
 from ask_page import AskPage, ChatState
@@ -33,6 +33,15 @@ from firewall_page import FirewallPage, new_state as new_fw_state
 from app_updates_card import AppUpdatesCard, new_state as new_appupd_state
 from webprotect_page import WebProtectPage, new_state as new_web_state
 from security_page import SecurityPage, new_state as new_sec_state, score_color
+from tools_page import ToolsPage
+from extensions_page import ExtensionsPage, new_state as new_ext_state
+from cleaner_page import CleanerPage, new_state as new_clean_state
+from shield_page import ShieldPage, new_state as new_shield_state
+from recovery_page import RecoveryPage
+
+# Pages opened from another one: the sidebar keeps that one highlighted.
+PARENT_PAGE = {"security": "dashboard", "recovery": "tools", "extensions": "tools", "cleaner": "tools",
+               "shield": "protection"}
 
 
 def configure_style(root: tk.Tk):
@@ -169,6 +178,7 @@ class App(tk.Tk):
         self.protection_on = None  # unknown until the first agent check
         self._transitioning = False
         self._scanning = False
+        self._request_seen = None
         saved_path = self.settings.get("watch_path")
         self.watch_path = saved_path if saved_path and Path(saved_path).exists() else default_watch_path()
         self.activity_tail = activity.Tail()
@@ -181,6 +191,10 @@ class App(tk.Tk):
         self.appupd_state = new_appupd_state()
         self.web_state = new_web_state()
         self.sec_state = new_sec_state()
+        self.ext_state = new_ext_state()
+        self.clean_state = new_clean_state()
+        self.shield_state = new_shield_state()
+        recovery.check_history()  # e.g. a stealer the background agent found while this window was closed
 
         self._build_layout()
         self._show_page("dashboard")
@@ -193,6 +207,7 @@ class App(tk.Tk):
 
         if autostart.supported() and autostart.is_enabled():
             autostart.set_enabled(True)  # re-point at this exe in case it was reinstalled elsewhere
+        self._sync_context_menu()
         if self.settings["protection_on"]:
             launcher.start_agent()  # e.g. first launch after install, or it crashed
         elif threat_intel.needs_update():
@@ -269,6 +284,7 @@ class App(tk.Tk):
             ("vpn", "globe", "nav_vpn"),
             ("firewall", "firewall", "nav_firewall"),
             ("web", "web", "nav_web"),
+            ("tools", "tools", "nav_tools"),
             ("protection", "shield", "nav_protection"),
             ("quarantine", "lock", "nav_quarantine"),
             ("activity", "history", "nav_history"),
@@ -308,6 +324,16 @@ class App(tk.Tk):
         self.pages["web"] = self.web_page
         self.security_page = SecurityPage(self.content, self)
         self.pages["security"] = self.security_page
+        self.tools_page = ToolsPage(self.content, self)
+        self.pages["tools"] = self.tools_page
+        self.ext_page = ExtensionsPage(self.content, self)
+        self.pages["extensions"] = self.ext_page
+        self.cleaner_page = CleanerPage(self.content, self)
+        self.pages["cleaner"] = self.cleaner_page
+        self.shield_page = ShieldPage(self.content, self)
+        self.pages["shield"] = self.shield_page
+        self.recovery_page = RecoveryPage(self.content, self)
+        self.pages["recovery"] = self.recovery_page
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -317,8 +343,8 @@ class App(tk.Tk):
 
     def _show_page(self, key):
         self.current_page = key
-        for k, item in self.nav.items():  # Security Check is opened from the dashboard
-            item.set_active(k == ("dashboard" if key == "security" else key))
+        for k, item in self.nav.items():
+            item.set_active(k == PARENT_PAGE.get(key, key))
         for frame in self.pages.values():
             frame.pack_forget()
         self.pages[key].pack(fill="both", expand=True)
@@ -334,6 +360,16 @@ class App(tk.Tk):
             self.web_page.refresh()
         elif key == "security":
             self.security_page.refresh()
+        elif key == "tools":
+            self.tools_page.refresh()
+        elif key == "extensions" and self.ext_state["items"] is None:
+            self.ext_page.scan()
+        elif key == "cleaner" and self.clean_state["found"] is None:
+            self.cleaner_page.analyze()
+        elif key == "shield":
+            self.shield_page.refresh()
+        elif key == "recovery":
+            self.recovery_page.refresh()
 
     # ---------------------------------------------------------- dashboard --
     def _build_dashboard_page(self):
@@ -365,6 +401,16 @@ class App(tk.Tk):
                    command=self._quick_scan).pack(side="left")
         self.hero_protect_btn = ttk.Button(buttons, text=t("turn_on_protection"), style="Ghost.TButton",
                                            command=self._toggle_protection)
+
+        # Shown while a password stealer's recovery checklist isn't finished.
+        self.rec_banner = RoundedCard(page, radius=12, padx=20, pady=10, command=lambda: self._show_page("recovery"))
+        icon_label(self.rec_banner.body, "warning", 14, fg=C.BAD).pack(side="left", padx=(0, 10))
+        self.rec_banner_text = tk.Label(self.rec_banner.body, text="", font=FONT_BOLD, fg=C.TEXT, bg=C.CARD)
+        self.rec_banner_text.pack(side="left")
+        tk.Label(self.rec_banner.body, text=t("rec_banner_open") + "  ›", font=FONT, fg=C.ACCENT,
+                 bg=C.CARD).pack(side="right")
+        self.rec_banner_progress = tk.Label(self.rec_banner.body, text="", font=FONT, fg=C.TEXT_MUTED, bg=C.CARD)
+        self.rec_banner_progress.pack(side="right", padx=(0, 14))
 
         self.score_bar = RoundedCard(page, radius=12, padx=20, pady=10, command=lambda: self._show_page("security"))
         self.score_bar.pack(fill="x", pady=(14, 0))
@@ -442,6 +488,16 @@ class App(tk.Tk):
             self.update_link.pack(side="left", padx=(10, 0))
         self._updating = getattr(self, "_updating", False)
 
+    def refresh_recovery_banner(self):
+        data = recovery.incident()
+        if recovery.needs_attention():
+            self.rec_banner_text.configure(text=t("rec_banner", threat=clip(data["threat"], 40)))
+            self.rec_banner_progress.configure(
+                text=t("rec_progress", done=len(data.get("done", [])), total=len(recovery.STEPS)))
+            self.rec_banner.pack(fill="x", pady=(14, 0), before=self.score_bar)
+        else:
+            self.rec_banner.pack_forget()
+
     def _refresh_recent(self):
         for child in self.recent_list.winfo_children():
             child.destroy()
@@ -491,6 +547,7 @@ class App(tk.Tk):
             self.dash_scan_value.configure(text=t("never"))
             self.dash_scan_sub.configure(text=t("run_first_scan"))
         self.dash_q_value.configure(text=plural("items", database.quarantine_count()))
+        self.refresh_recovery_banner()
         self._refresh_intel_footer()
         self._refresh_recent()
 
@@ -689,13 +746,21 @@ class App(tk.Tk):
         self._pick_target(self.watch_path)
         self._start_scan()
 
-    def _start_scan(self):
+    def _start_scan(self, items=None):
+        """Scans the chosen target, or `items` (paths from the right-click menu)."""
         choice = self.scan_target.get()
+        if items:
+            choice = items[0] if len(items) == 1 else t("scan_n_items", n=number(len(items)))
+            for chip in self._chips.values():
+                chip.set_rest(C.BORDER)
+                chip.label.configure(fg=C.TEXT)
+            self.scan_target_label.configure(text=shorten("; ".join(items), 80))
         target = Path(choice) if choice != ALL_DRIVES else None
-        if target is not None and not target.exists():
+        if not items and target is not None and not target.exists():
             messagebox.showerror("Sentinel", t("folder_missing", path=target))
             return
         self._scanning = True
+        self._scan_stealers = []
         self._close_scan_summary()
         self._scan_started = datetime.now().astimezone()
         self.scan_tree.delete(*self.scan_tree.get_children())
@@ -708,17 +773,17 @@ class App(tk.Tk):
         self.scan_ring.spin("0", t("files_checked"))
         name = t("folder_all") if target is None else (target.name or target)
         self.scan_status.configure(text=t("scanning_folder", name=name), fg=C.TEXT_MUTED)
-        threading.Thread(target=self._scan_worker, args=(choice,), daemon=True).start()
+        threading.Thread(target=self._scan_worker, args=(choice, items), daemon=True).start()
 
     def _stop_scan(self):
         self._scan_stop.set()  # the worker checks this between files
         self.stop_btn.configure(state="disabled", text=t("scan_stopping"))
 
-    def _scan_worker(self, choice: str):
+    def _scan_worker(self, choice: str, items=None):
         total = flagged = 0
         counts = {"signature_match": 0, "suspicious": 0, "error": 0}
-        full = choice == ALL_DRIVES
-        for root in scan_roots(choice):
+        full = choice == ALL_DRIVES and not items
+        for root in items or scan_roots(choice):
             for result in scanner.scan_directory(Path(root), recursive=True):
                 if self._scan_stop.is_set():
                     break
@@ -739,6 +804,9 @@ class App(tk.Tk):
     def _on_scan_result(self, result):
         if result.verdict == "signature_match":
             tag, verdict, detail = "threat", t("verdict_threat"), result.signature_name
+            if recovery.is_stealer(result.signature_name):
+                self._scan_stealers.append(result.signature_name)
+                recovery.record(result.signature_name)
         elif result.verdict == "suspicious":
             tag, verdict, detail = "suspicious", t("verdict_suspicious"), "; ".join(result.heuristic_flags)
         else:
@@ -824,6 +892,12 @@ class App(tk.Tk):
         row(t("summary_unreadable"), number(unreadable))
         divider()
 
+        if getattr(self, "_scan_stealers", None):  # password stealers: there's more to do than quarantine
+            tk.Label(body, text=t("summary_stealer"), font=FONT_SMALL, fg=C.BAD, bg=C.CARD, wraplength=360,
+                     justify="left").pack(anchor="w", pady=(10, 0))
+            ttk.Button(body, text=t("summary_what_now"), style="Danger.TButton",
+                       command=lambda: (self._close_scan_summary(), self._show_page("recovery"))).pack(
+                fill="x", pady=(8, 0))
         buttons = tk.Frame(body, bg=C.CARD)
         buttons.pack(fill="x", pady=(14, 0))
         ttk.Button(buttons, text=t("summary_view"), style="Ghost.TButton",
@@ -913,7 +987,8 @@ class App(tk.Tk):
         self.download_desc = self._layer_row(layers.body, "download", t("layer_download"), "", change=True)
         self._layer_row(layers.body, "apps", t("layer_program"), t("layer_program_desc"))
         self._layer_row(layers.body, "power", t("layer_startup"), t("layer_startup_desc"))
-        self._layer_row(layers.body, "lock", t("layer_ransomware"), t("layer_ransomware_desc"))
+        self._layer_row(layers.body, "lock", t("layer_ransomware"), t("layer_ransomware_desc"),
+                        button=(t("shield_open"), lambda: self._show_page("shield")))
         self.usb_row = tk.Frame(layers.body, bg=C.CARD)
         self.usb_row.pack(fill="x")
         self._render_usb_row()
@@ -963,7 +1038,7 @@ class App(tk.Tk):
         self.settings = settings.load()
         self._render_usb_row()
 
-    def _layer_row(self, body, icon, title, desc, change=False, last=False):
+    def _layer_row(self, body, icon, title, desc, change=False, last=False, button=None):
         row = tk.Frame(body, bg=C.CARD)
         row.pack(fill="x", pady=6)
         icon_label(row, icon, 16, fg=C.ACCENT).pack(side="left", padx=(0, 16))
@@ -973,6 +1048,8 @@ class App(tk.Tk):
         if change:
             ttk.Button(row, text=t("change_folder"), style="Ghost.TButton",
                        command=self._change_watch_folder).pack(side="right", padx=(0, 12))
+        if button:
+            ttk.Button(row, text=button[0], style="Ghost.TButton", command=button[1]).pack(side="right", padx=(0, 12))
         col = tk.Frame(row, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
         tk.Label(col, text=title, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
@@ -1013,11 +1090,42 @@ class App(tk.Tk):
         """Keeps the status and live activity in sync with the background agent,
         including changes made from the tray menu."""
         self.after(500, self._poll_agent)  # first, so an error here can't stop the polling
+        self._check_scan_requests()
         if not self._transitioning:
             running = launcher.agent_running()
             if running != self.protection_on:
                 self._set_protection_indicator(running)
         self._append_activity(self.activity_tail.read_new())
+
+    def _check_scan_requests(self):
+        """Right-click "Scan with Sentinel": gather every selected path (Explorer starts one
+        Sentinel per file) and scan them together once the last one has arrived."""
+        if self._scanning or not scan_requests.pending():
+            self._request_seen = None
+            return
+        now = datetime.now()
+        if self._request_seen is None:
+            self._request_seen = now  # wait a moment for the rest of a multi-file selection
+            return
+        if (now - self._request_seen).total_seconds() < 0.8:
+            return
+        self._request_seen = None
+        items = scan_requests.take()
+        if items:
+            self._show_window()
+            self._show_page("scan")
+            self._start_scan(items)
+
+    def _sync_context_menu(self):
+        if not context_menu.supported():
+            return
+        try:
+            if self.settings.get("context_menu", True):
+                context_menu.enable(t("ctx_scan_with"))  # also re-points it after a reinstall or language change
+            else:
+                context_menu.disable()
+        except OSError:
+            pass
 
     def _set_protection_indicator(self, on: bool):
         self.protection_on = on
@@ -1369,6 +1477,9 @@ class App(tk.Tk):
         page = tk.Frame(self.content, bg=C.BG)
         self.pages["settings"] = page
         page_header(page, t("settings_title"), t("settings_sub"))
+        scroll = ScrollArea(page, bg=C.BG)
+        scroll.pack(fill="both", expand=True)
+        page = scroll.inner  # everything below scrolls when the window is small
 
         theme_choice = self.settings.get("theme", "dark")
         self._settings_card(page, "settings", t("appearance"), t("appearance_desc"), [
@@ -1382,13 +1493,50 @@ class App(tk.Tk):
             for code, native in i18n.LANGUAGES.items()
         ], pady=(14, 0))
 
-        about = RoundedCard(page, radius=16, padx=24, pady=18)
-        about.pack(fill="x", pady=(14, 0))
+        extras = RoundedCard(page, radius=16, padx=24, pady=8)
+        extras.pack(fill="x", pady=(14, 0))
+        menu_desc = t("ctx_desc") + ("" if context_menu.supported() else t("installed_only"))
+        self._setting_toggle(extras.body, "scan", t("ctx_title"), menu_desc,
+                             self.settings.get("context_menu", True), self._toggle_context_menu,
+                             enabled=context_menu.supported())
+        tk.Frame(extras.body, bg=C.BORDER, height=1).pack(fill="x")
+        self._setting_toggle(extras.body, "game", t("game_title"), t("game_desc"),
+                             self.settings.get("game_mode", True), self._toggle_game_mode)
+
+        about = RoundedCard(page, radius=16, padx=24, pady=14)
+        about.pack(fill="x", pady=(14, 2))
         icon_label(about.body, "info", 18, fg=C.ACCENT).pack(side="left", padx=(0, 14))
         col = tk.Frame(about.body, bg=C.CARD)
         col.pack(side="left", fill="x", expand=True)
         tk.Label(col, text=t("about_version", version=VERSION), font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
         tk.Label(col, text=t("about_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD).pack(anchor="w")
+
+    def _setting_toggle(self, body, icon, title, desc, on, command, enabled=True):
+        row = tk.Frame(body, bg=C.CARD)
+        row.pack(fill="x", pady=8)
+        icon_label(row, icon, 16, fg=C.ACCENT).pack(side="left", padx=(0, 16))
+        switch = ToggleSwitch(row, command=lambda: command(switch), on=on)
+        switch.pack(side="right", padx=(12, 0))
+        switch.set_enabled(enabled)
+        col = tk.Frame(row, bg=C.CARD)
+        col.pack(side="left", fill="x", expand=True)
+        tk.Label(col, text=title, font=FONT_BOLD, fg=C.TEXT, bg=C.CARD).pack(anchor="w")
+        label = tk.Label(col, text=desc, font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD, justify="left", anchor="w")
+        label.pack(anchor="w", fill="x")
+        col.bind("<Configure>", lambda e: label.configure(wraplength=max(150, e.width - 4)))
+
+    def _toggle_context_menu(self, switch):
+        on = not switch.on
+        settings.save(context_menu=on)
+        self.settings = settings.load()
+        self._sync_context_menu()
+        switch.set(on)
+
+    def _toggle_game_mode(self, switch):
+        on = not switch.on
+        settings.save(game_mode=on)  # the background agent reads it
+        self.settings = settings.load()
+        switch.set(on)
 
     def _settings_card(self, page, icon, title, desc, options, pady=(0, 0)):
         """A card with a row of selectable option tiles: (key, label, sublabel, selected, command)."""
@@ -1441,6 +1589,7 @@ class App(tk.Tk):
         settings.save(language=code)  # the background agent follows the settings file
         self.settings = settings.load()
         i18n.set_language(code)
+        self._sync_context_menu()  # the menu entry's text
         self._rebuild()
 
     def _change_theme(self, choice):
@@ -1490,6 +1639,14 @@ class App(tk.Tk):
                     self.web_page.handle(kind, payload)
                 elif kind.startswith("sec_"):
                     self.security_page.handle(kind, payload)
+                elif kind.startswith("ext_"):
+                    self.ext_page.handle(kind, payload)
+                elif kind.startswith("clean_"):
+                    self.cleaner_page.handle(kind, payload)
+                elif kind.startswith("shield_"):
+                    self.shield_page.handle(kind, payload)
+                elif kind.startswith("rec_"):
+                    self.recovery_page.handle(kind, payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
@@ -1542,6 +1699,10 @@ def main():
         agent.main()
         return
     crashlog.install("window")
+    if context_menu.FLAG in sys.argv:  # right-click "Scan with Sentinel"
+        index = sys.argv.index(context_menu.FLAG)
+        if index + 1 < len(sys.argv):
+            scan_requests.add(sys.argv[index + 1])
     if not single_instance.UI.acquire():
         single_instance.UI.signal()  # bring the open window to the front instead
         return

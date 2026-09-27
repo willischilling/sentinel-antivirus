@@ -73,6 +73,12 @@ def remove_startup_entry():
         pass
 
 
+def remove_context_menu():
+    from core import context_menu
+
+    context_menu.disable()
+
+
 def remove_uninstall_entry():
     try:
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, REG_UNINSTALL_KEY)
@@ -105,12 +111,13 @@ def schedule_folder_removal():
 
 def remove_system_changes():
     """Undoes what Sentinel changed outside its folder: the VPN tunnel and its config, and
-    Sentinel's firewall rules (blocked apps, Lockdown). Those need administrator rights, so
+    Sentinel's firewall rules (blocked apps, Lockdown), web protection's DNS change, and what it
+    changed in the ransomware shield (Controlled folder access). Those need administrator rights, so
     Windows asks once. WireGuard itself is left installed."""
     import base64
     import ctypes
 
-    from core import elevate, firewall, vpn, webprotect
+    from core import elevate, firewall, shield, vpn, webprotect
 
     script = []
     if vpn.status() != "not_setup" or vpn.PROGRAM_DATA.exists():
@@ -139,8 +146,12 @@ def remove_system_changes():
         script += webprotect.off_script(webprotect.saved_settings())
         script.append("Clear-DnsClientCache")
         script.append(f"Remove-Item -Recurse -Force {firewall._q(str(webprotect.STATE_DIR))} -ErrorAction SilentlyContinue")
+    shield_lines = shield.undo_script()  # only what Sentinel itself changed in Controlled folder access
+    if shield_lines:
+        script += shield_lines
+        script.append(f"Remove-Item -Recurse -Force {firewall._q(str(shield.STATE_DIR))} -ErrorAction SilentlyContinue")
     if not script:
-        log("no VPN, firewall or web protection changes to undo")
+        log("no VPN, firewall, web protection or ransomware shield changes to undo")
         return
     encoded = base64.b64encode("\n".join(script).encode("utf-16-le")).decode()
     info = elevate.SHELLEXECUTEINFOW(cbSize=ctypes.sizeof(elevate.SHELLEXECUTEINFOW),
@@ -175,9 +186,10 @@ def main():
     log(f"uninstalling from {INSTALL_DIR}")
     results = [
         step("close running Sentinel", kill_running_app),
-        step("undo VPN and firewall changes", remove_system_changes),
+        step("undo VPN, firewall, web protection and shield changes", remove_system_changes),
         step("remove shortcuts", remove_shortcuts),
         step("remove start-with-Windows entry", remove_startup_entry),
+        step("remove right-click menu entry", remove_context_menu),
         step("remove Apps & Features entry", remove_uninstall_entry),
         step("schedule install folder removal", schedule_folder_removal),
     ]

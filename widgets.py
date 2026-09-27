@@ -42,6 +42,12 @@ ICONS = {
     "blocked": "",
     "web": "\ue909",
     "usb": "\ue88e",
+    "tools": "\ue90f",
+    "puzzle": "\uea86",
+    "broom": "\uea99",
+    "game": "\ue7fc",
+    "key": "\ue8d7",
+    "health": "\ue9d9",
 }
 _icon_family = None
 
@@ -357,7 +363,7 @@ class NavItem(tk.Frame):
         self.bar = tk.Frame(body, bg=C.PANEL, width=3, height=18)
         self.bar.pack(side="left")
         self.icon = icon_label(body, icon, 13, fg=C.TEXT_MUTED, bg=C.PANEL)
-        self.icon.pack(side="left", padx=(9, 12), pady=7)
+        self.icon.pack(side="left", padx=(9, 12), pady=6)
         self.badge = tk.Label(body, text="●", font=(C.UI, 8), fg=C.ACCENT, bg=C.PANEL)
         self.text = tk.Label(body, text=label, font=FONT, fg=C.TEXT_MUTED, bg=C.PANEL, anchor="w")
         self.text.pack(side="left", fill="x", expand=True)
@@ -416,3 +422,46 @@ class EmptyState(tk.Frame):
 
     def hide(self):
         self.place_forget()
+
+
+# -------------------------------------------------------------- ScrollArea --
+class ScrollArea(tk.Frame):
+    """A vertically scrolling area with a slim scrollbar; put content in .inner.
+    The mouse wheel scrolls it whenever the pointer is over it."""
+
+    def __init__(self, parent, bg=None):
+        bg = C.CARD if bg is None else bg
+        super().__init__(parent, bg=bg)
+        from tkinter import ttk
+
+        self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
+        self.bar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview, style="Slim.Vertical.TScrollbar")
+        self.canvas.configure(yscrollcommand=self._set_bar)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner = tk.Frame(self.canvas, bg=bg)
+        window = self.canvas.create_window(0, 0, window=self.inner, anchor="nw")
+        self.inner.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind("<Configure>", lambda e: self.canvas.itemconfigure(window, width=e.width))
+        self.bind("<Enter>", lambda e: self.bind_all("<MouseWheel>", self._wheel))
+
+    def _wheel(self, event):
+        try:
+            widget = self.winfo_containing(event.x_root, event.y_root)
+        except (KeyError, tk.TclError):
+            return
+        while widget is not None and widget is not self:
+            widget = widget.master
+        if widget is self and self.canvas.yview() != (0.0, 1.0):
+            self.canvas.yview_scroll(int(-event.delta / 120) * 3, "units")
+
+    def _set_bar(self, first, last):
+        """The scrollbar only shows when there's something to scroll."""
+        self.bar.set(first, last)
+        needed = float(first) > 0 or float(last) < 1
+        if needed and not self.bar.winfo_ismapped():
+            self.bar.pack(side="right", fill="y", before=self.canvas)
+        elif not needed and self.bar.winfo_ismapped():
+            self.bar.pack_forget()
+
+    def to_top(self):
+        self.canvas.yview_moveto(0)

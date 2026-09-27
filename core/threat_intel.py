@@ -5,6 +5,8 @@
 - ThreatFox (abuse.ch) SHA-256 hashes of malware payloads seen in active
   campaigns, with family names (confidence 75% or higher only).
 - YARA Forge "extended" rule set, compiled for core/yara_engine.py.
+- Phishing/malware link lists (core/link_intel.py) and known-bad browser
+  extension IDs (core/extensions.py).
 
 Only hash lists and rule text are downloaded, never malware samples.
 """
@@ -17,7 +19,7 @@ import urllib.request
 import zipfile
 from datetime import datetime, timezone
 
-from . import database, link_intel, paths, yara_engine
+from . import database, extensions, link_intel, paths, yara_engine
 
 MB_FULL_URL = "https://bazaar.abuse.ch/export/txt/sha256/full/"
 MB_RECENT_URL = "https://bazaar.abuse.ch/export/csv/recent/"
@@ -152,6 +154,7 @@ def update(progress=lambda key: None) -> dict:
         _install_threatfox_hashes(progress)
         _install_yara_rules(progress)
         link_intel.install(progress)
+        extensions.install(progress)
         database.set_meta(
             intel_updated=_now_iso(),
             intel_hashes=database.feed_hash_count(),

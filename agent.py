@@ -15,8 +15,8 @@ import psutil
 import launcher
 import single_instance
 from core import (
-    activity, authenticode, database, elevate, i18n, paths, quarantine, scanner, schedule, settings, signatures,
-    threat_intel, usb, vpn, wifi,
+    activity, authenticode, database, elevate, gamemode, i18n, paths, quarantine, recovery, scanner, schedule,
+    settings, signatures, threat_intel, usb, vpn, wifi,
 )
 from core.i18n import number, t
 from gui import clip, configure_style, default_watch_path
@@ -37,6 +37,10 @@ LOCATION_KEYS = {
     "Scheduled task": "loc_task",
 }
 LANGUAGE_CHECK_SECONDS = 2.0
+GAME_CHECK_SECONDS = 2.0
+# Popups game mode holds until the game is closed. A program already running as a known
+# virus and ransomware-like activity are never held: those can't wait.
+HOLDABLE = {"file", "startup", "usb", "usb_clean", "wifi"}
 
 
 def location_name(location: str) -> str:
@@ -64,6 +68,9 @@ class Agent(tk.Tk):
         self.toasts = ToastManager(self)
         self._open_toasts = {}
         self._notified = set()
+        self._held = []          # (kind, payload) popups waiting for the game to end
+        self._game = None        # the full-screen program while game mode is holding popups
+        self._next_game_check = 0.0
 
         saved = settings.load().get("watch_path")
         watch_path = saved if saved and Path(saved).exists() else default_watch_path()
@@ -124,7 +131,7 @@ class Agent(tk.Tk):
         while True:
             time.sleep(60)
             try:
-                if schedule.is_due():
+                if schedule.is_due() and self._game is None:  # game mode: wait until the game is closed
                     schedule.mark_ran()
                     self._scheduled_scan()
             except Exception as e:  # never let a bad file or setting stop future scans
@@ -296,12 +303,22 @@ class Agent(tk.Tk):
         if time.monotonic() >= self._next_language_check:
             self._next_language_check = time.monotonic() + LANGUAGE_CHECK_SECONDS
             self._sync_language()
+        if time.monotonic() >= self._next_game_check:
+            self._next_game_check = time.monotonic() + GAME_CHECK_SECONDS
+            self._check_game_mode()
         processed = 0
         try:
             while processed < 40:
                 kind, payload = self.events.get_nowait()
+                if kind in HOLDABLE and self._game is not None:
+                    self._held.append((kind, payload))
+                    if kind == "file":  # still logged straight away, just no popup
+                        self._log_threat(payload)
+                    continue
                 if kind == "file":
                     self._on_file_alert(payload)
+                elif kind == "file_held":  # already logged when game mode held it
+                    self._on_file_alert(payload, logged=True)
                 elif kind == "process":
                     self._on_process_alert(payload)
                 elif kind == "startup":
@@ -328,6 +345,18 @@ class Agent(tk.Tk):
             pass
         self.after(50, self._pump)
 
+    def _check_game_mode(self):
+        app = gamemode.fullscreen_app() if gamemode.enabled() else None
+        if app is not None and self._game is None:
+            self._game = app
+            activity.log(t("log_game_on", app=app or t("unknown")), "muted")
+        elif app is None and self._game is not None:
+            self._game = None
+            held, self._held = self._held, []
+            activity.log(t("log_game_off", n=number(len(held))), "muted")
+            for kind, payload in held:  # shown now, the usual way
+                self.events.put((kind, payload) if kind != "file" else ("file_held", payload))
+
     def _shutdown(self):
         for observer in (self.observer, self.ransom_observer):
             if observer:
@@ -344,7 +373,7 @@ class Agent(tk.Tk):
             t("log_action_failed", action=action, target=target, error=err), "warn")
 
     # ------------------------------------------------------------ alerts --
-    def _on_file_alert(self, result):
+    def _on_file_alert(self, result, logged=False):
         # A file being written fires several change events; only notify once
         # per path while its popup is open, and once per (path, content) ever.
         path_key = str(result.path)
@@ -352,13 +381,25 @@ class Agent(tk.Tk):
         if path_key in self._open_toasts or seen_key in self._notified:
             return
         self._notified.add(seen_key)
+        if not logged:
+            self._log_threat(result)
+        self._notify_file(result, result.verdict == "signature_match")
 
-        is_threat = result.verdict == "signature_match"
-        if is_threat:
+    def _log_threat(self, result):
+        if result.verdict == "signature_match":
             activity.log(t("log_threat", path=result.path, name=result.signature_name), "threat")
+            self._note_stealer(result.signature_name)
         else:
             activity.log(t("log_suspicious", path=result.path, flags="; ".join(result.heuristic_flags)), "warn")
-        self._notify_file(result, is_threat)
+
+    @staticmethod
+    def _note_stealer(name):
+        """Password stealers need more than quarantine: open the recovery checklist."""
+        if recovery.is_stealer(name) and not recovery.needs_attention():
+            recovery.record(name)
+            activity.log(t("log_recovery_opened", name=name), "threat")
+        elif recovery.is_stealer(name):
+            recovery.record(name)
 
     def _notify_file(self, result, is_threat: bool):
         path = result.path
@@ -407,6 +448,7 @@ class Agent(tk.Tk):
     def _on_process_alert(self, alert):
         activity.log(t("log_process_match", pid=alert.pid, name=alert.name, threat=alert.signature_name),
                      "threat")
+        self._note_stealer(alert.signature_name)
         exe = Path(alert.exe_path)
 
         def end_process():
@@ -447,6 +489,8 @@ class Agent(tk.Tk):
 
     def _on_startup_alert(self, entry, program, result, signature):
         is_threat = bool(result and result.verdict == "signature_match")
+        if is_threat:
+            self._note_stealer(result.signature_name)
         subject = program.name if program else entry.name
         is_task = entry.kind == "task"
         if (is_task and not is_threat and entry.name.startswith("\\Microsoft\\")

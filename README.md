@@ -52,7 +52,7 @@ This runs as a separate background process (`Sentinel.exe --agent`), so it keeps
 | Download protection | Scans new files in the watched folder (Downloads by default) as soon as they finish downloading. |
 | Program protection | Checks each new program within about a second of it starting, plus a background sweep of everything already running. |
 | Startup protection | Alerts when a program adds itself to the registry Run keys, a Startup folder, or Task Scheduler. Programs with a valid Microsoft signature (Edge, Windows components) are logged without a popup, except launchers like PowerShell, cmd and rundll32, which malware often hides behind. |
-| Ransomware protection | Watches Documents, Desktop, Pictures, Music, Videos and Downloads for many files suddenly turning into unreadable data or being renamed to strange extensions. |
+| Ransomware protection | Watches Documents, Desktop, Pictures, Music, Videos and Downloads for many files suddenly turning into unreadable data or being renamed to strange extensions. The optional **Ransomware shield** (below) goes further and blocks changes before they happen. |
 | USB drive protection | Scans USB drives and SD cards as soon as they're plugged in, at background priority (or asks first, or is off). Threats get the usual popup, and a clean drive gets a short "no threats" note. |
 
 **Alerts.** These appear as popups in the bottom-right corner, with buttons to act on them:
@@ -61,6 +61,14 @@ This runs as a separate background process (`Sentinel.exe --agent`), so it keeps
 - Remove or Keep a startup entry or scheduled task.
 
 Nothing is ended or deleted without a click.
+
+**Game mode** (on by default, in Settings): while a game or video is full screen, Sentinel holds its popups and puts off scheduled scans and USB auto-scans until you're done, then shows what it held. It checks what Windows reports (`SHQueryUserNotificationState`) and whether the window in front covers its whole monitor, which catches borderless games too. Threats are still logged right away, and a program already running as a known virus or ransomware-like activity always alerts immediately.
+
+**Ransomware shield.** An on/off switch for Windows' own **Controlled folder access** (part of Microsoft Defender), opened from the Ransomware protection row. When it's on, only apps Microsoft trusts, and ones you allow, can change files in Documents, Pictures, Videos, Music and Desktop, plus any folders you add. Anything else, like ransomware, is blocked by Windows before a single file changes.
+- Apps Windows blocked in the last 30 days are listed (read from Defender's event log), each with an **Allow** button, for games that can't save.
+- Sentinel allows itself, so it can still quarantine threats from protected folders.
+- Every change goes through one admin prompt. What Sentinel changed is recorded in an admin-only folder, and uninstalling undoes exactly that.
+- It needs Microsoft Defender to be the active antivirus; with another antivirus, the page says so.
 
 **Programs running as administrator.** If Windows blocks an action (ending a program that runs as administrator or SYSTEM, moving a file out of Program Files, removing an all-users startup entry or task), Sentinel shows the normal Windows admin prompt. After you click Yes, a one-shot `Sentinel.exe --elevated` process does just that action and exits. Sentinel never stays elevated. It's installed in your user folder, so a permanently elevated Sentinel would let any program that replaced its files gain admin rights. Before ending a program, the elevated step checks that the process ID still belongs to the same file.
 
@@ -139,9 +147,25 @@ A control panel for the built-in **Windows Firewall**, a real kernel-level filte
   - The match is found locally among the hundreds of results that come back.
   - The password is never sent, saved or logged, and the text box is cleared after each check.
 
+### Tools
+A Tools tab with four utilities:
+
+- **Browser extension checker.** Lists every extension in every profile of Chrome, Edge, Brave, Vivaldi, Opera, Opera GX and Firefox, riskiest first, with a **Manage** button that opens the browser's page for it.
+  - **Known bad:** on [Malicious Extension Sentry](https://github.com/toborrm9/malicious_extension_sentry) (MIT, updated daily), about 6,800 Chrome and Edge extensions pulled from the stores for malware, spyware, adware, search hijacking or policy violations. It updates with the threat database. Also flagged: anything the browser itself has blocklisted, and sideloaded extensions containing files that match known malware fingerprints.
+  - **Risky:** installed from outside the web store (loaded from a folder, the command line or a policy, the usual way adware and stealers sneak extensions in) with access to every website or to sensitive features.
+  - **Wide access:** from the store, but can read and change every website, or has several sensitive permissions (cookies, web traffic, debugger, native messaging...). Normal for ad blockers and password managers.
+  - Only the ID list is downloaded; nothing about your extensions leaves the PC.
+- **Junk cleaner.** Shows how much each category would free and cleans the ones you pick: temporary files (older than a day), browser caches, app caches (Discord, Spotify, Steam, Epic Games, Roblox, Teams), crash reports, and optionally the Recycle Bin and the recent-files list.
+  - Only those fixed folders are touched. Passwords, cookies, history and bookmarks are never deleted.
+  - Folder links (junctions) are never followed, files in use are skipped, and apps that are running are left alone, with a note to close them.
+  - Windows Update leftovers are handled by Windows' own Disk Cleanup, one click away.
+- **Recovery checklist.** Password stealers (RedLine, Lumma, Vidar...) copy saved passwords, sign-in cookies, Discord tokens and crypto wallets within seconds, so quarantining them isn't the end of it. When Sentinel finds one (or a remote-access trojan like AsyncRAT), in a scan or in real time, the dashboard shows a banner and the scan summary a **What to do now** button. The checklist walks through the steps in the order that matters: clean up, a second opinion from Defender, email password first (from another device), browser passwords (it names the browsers that have saved passwords, reading only a count), signing out of other devices with direct links, 2FA, bank and crypto, and the leak check. Progress is saved; you can also open it any time.
+- **Password leak check** (see above).
+
 ### Desktop app
 - A dashboard with protection status, last scan, quarantine count, recent detections and threat database status.
 - A scanner for Downloads, Desktop, Documents, **all drives** or any folder, with an animated progress ring and a **Stop** button. A stopped scan keeps what it found.
+- **Right-click scanning:** "Scan with Sentinel" in File Explorer's menu for files, folders and drives (per-user registry entry, no admin needed; on Windows 11 it's under *Show more options*). Selecting several items scans them together. It can be turned off in Settings.
 - Quarantine: files are moved to an isolated folder and renamed so they can't run, and can be restored or permanently deleted.
 - Detection history.
 - A system tray icon, and an option to start with Windows.
