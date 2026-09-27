@@ -49,6 +49,12 @@ def is_newer(candidate: str, current: str = VERSION) -> bool:
     return parse_version(candidate) > parse_version(current)
 
 
+def auto_install_on() -> bool:
+    from . import settings
+
+    return settings.load().get("auto_update", True)
+
+
 def can_self_update() -> bool:
     """Only the installed app can replace itself; a run from source can't."""
     return getattr(sys, "frozen", False)
@@ -101,8 +107,9 @@ def download(release: Release, progress=lambda done, total: None, cancelled=lamb
     return target
 
 
-def launch_installer(installer: Path):
+def launch_installer(installer: Path, quiet: bool = False):
     """Starts the installer in automatic update mode, detached, so it can close
-    and replace this app while it runs."""
-    subprocess.Popen([str(installer), "--update"], cwd=str(installer.parent),
+    and replace this app while it runs. Quiet: no window, and only the background
+    protection comes back afterwards (for automatic updates)."""
+    subprocess.Popen([str(installer), "--update"] + (["--quiet"] if quiet else []), cwd=str(installer.parent),
                      creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP, close_fds=True)

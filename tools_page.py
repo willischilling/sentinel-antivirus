@@ -5,10 +5,10 @@ Also the small helpers the tool pages share.
 import tkinter as tk
 
 import theme as C
-from core import recovery
+from core import privacy, recovery
 from core.i18n import number, t
 from theme import FONT, FONT_BOLD, FONT_LARGE, FONT_SMALL
-from widgets import RoundedCard, icon_label
+from widgets import RoundedCard, ScrollArea, icon_label
 
 
 def size_text(size: int) -> str:
@@ -39,8 +39,9 @@ class ToolsPage(tk.Frame):
         self.app = app
         tk.Label(self, text=t("nav_tools"), font=(C.DISPLAY, 18), fg=C.TEXT, bg=C.BG).pack(anchor="w")
         tk.Label(self, text=t("tools_sub"), font=FONT, fg=C.TEXT_MUTED, bg=C.BG).pack(anchor="w", pady=(2, 16))
-        self.grid_frame = tk.Frame(self, bg=C.BG)
-        self.grid_frame.pack(fill="both", expand=True)
+        self.scroll = ScrollArea(self, bg=C.BG)
+        self.scroll.pack(fill="both", expand=True)
+        self.grid_frame = self.scroll.inner
         self._render()
 
     def refresh(self):
@@ -49,6 +50,8 @@ class ToolsPage(tk.Frame):
             self.app.ext_page.scan()
         if self.app.clean_state["found"] is None:
             self.app.cleaner_page.analyze()
+        if self.app.guard_state["items"] is None:
+            self.app.guard_page.refresh()
         self._render()
 
     def _render(self):
@@ -57,17 +60,21 @@ class ToolsPage(tk.Frame):
         grid = self.grid_frame
         for i in range(2):
             grid.columnconfigure(i, weight=1, uniform="tools")
-            grid.rowconfigure(i, weight=1, uniform="toolrows")
         cards = [
             ("puzzle", t("ext_title"), t("tools_ext_desc"), self._ext_status(), "extensions"),
             ("broom", t("clean_title"), t("tools_clean_desc"), self._clean_status(), "cleaner"),
+            ("scan", t("privacy_title"), t("tools_privacy_desc"), self._privacy_status(), "privacy"),
+            ("globe", t("net_title"), t("tools_net_desc"), self._net_status(), "network"),
+            ("web", t("guard_title"), t("tools_guard_desc"), self._guard_status(), "guard"),
+            ("delete", t("shred_title"), t("tools_shred_desc"), (t("tools_shred_status"), C.TEXT_MUTED), "shred"),
             ("health", t("rec_title"), t("tools_rec_desc"), self._rec_status(), "recovery"),
             ("key", t("pw_title"), t("tools_pw_desc"), (t("tools_pw_status"), C.TEXT_MUTED), "security"),
         ]
         for i, (icon, title, desc, (status, color), target) in enumerate(cards):
-            card = RoundedCard(grid, radius=16, padx=22, pady=18, command=lambda p=target: self._open(p))
-            card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0 if i % 2 == 0 else 7, 7 if i % 2 == 0 else 0),
-                      pady=(0 if i < 2 else 7, 7 if i < 2 else 0))
+            grid.rowconfigure(i // 2, weight=1, uniform="toolrows", minsize=150)
+            card = RoundedCard(grid, radius=16, padx=22, pady=16, command=lambda p=target: self._open(p))
+            card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=(0 if i % 2 == 0 else 7, 7 if i % 2 == 0 else 8),
+                      pady=(0 if i < 2 else 7, 7))
             head = tk.Frame(card.body, bg=C.CARD)
             head.pack(fill="x")
             badge = tk.Frame(head, bg=C.BORDER, width=40, height=40)
@@ -85,6 +92,29 @@ class ToolsPage(tk.Frame):
 
     def _open(self, page):
         self.app._show_page(page)
+
+    def _privacy_status(self):
+        try:
+            live = privacy.in_use()
+        except OSError:
+            live = []
+        if live:
+            return t("tools_privacy_live", app=live[0].name), C.WARN
+        return t("tools_privacy_idle"), C.GOOD
+
+    def _net_status(self):
+        result = self.app.net_state["result"]
+        if result is None:
+            return t("tools_net_none"), C.TEXT_MUTED
+        return t("net_found", n=number(len(result.devices))), C.ACCENT
+
+    def _guard_status(self):
+        items = self.app.guard_state["items"]
+        if items is None:
+            return t("tools_checking"), C.TEXT_MUTED
+        if items:
+            return t("guard_found", n=number(len(items))), C.WARN
+        return t("tools_guard_ok"), C.GOOD
 
     def _ext_status(self):
         s = self.app.ext_state

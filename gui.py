@@ -38,10 +38,14 @@ from extensions_page import ExtensionsPage, new_state as new_ext_state
 from cleaner_page import CleanerPage, new_state as new_clean_state
 from shield_page import ShieldPage, new_state as new_shield_state
 from recovery_page import RecoveryPage
+from privacy_page import PrivacyPage
+from network_page import NetworkPage, new_state as new_net_state
+from guard_page import GuardPage, new_state as new_guard_state
+from shred_page import ShredPage
 
 # Pages opened from another one: the sidebar keeps that one highlighted.
 PARENT_PAGE = {"security": "dashboard", "recovery": "tools", "extensions": "tools", "cleaner": "tools",
-               "shield": "protection"}
+               "shield": "protection", "privacy": "tools", "network": "tools", "guard": "tools", "shred": "tools"}
 
 
 def configure_style(root: tk.Tk):
@@ -194,6 +198,9 @@ class App(tk.Tk):
         self.ext_state = new_ext_state()
         self.clean_state = new_clean_state()
         self.shield_state = new_shield_state()
+        self.net_state = new_net_state()
+        self.guard_state = new_guard_state()
+        self._shredding = False
         recovery.check_history()  # e.g. a stealer the background agent found while this window was closed
 
         self._build_layout()
@@ -334,6 +341,13 @@ class App(tk.Tk):
         self.pages["shield"] = self.shield_page
         self.recovery_page = RecoveryPage(self.content, self)
         self.pages["recovery"] = self.recovery_page
+        self.privacy_page = PrivacyPage(self.content, self)
+        self.pages["privacy"] = self.privacy_page
+        self.network_page = NetworkPage(self.content, self)
+        self.pages["network"] = self.network_page
+        self.guard_page = GuardPage(self.content, self)
+        self.pages["guard"] = self.guard_page
+        self.pages["shred"] = ShredPage(self.content, self)
         self._build_protection_page()
         self._build_quarantine_page()
         self._build_activity_page()
@@ -370,6 +384,12 @@ class App(tk.Tk):
             self.shield_page.refresh()
         elif key == "recovery":
             self.recovery_page.refresh()
+        elif key == "privacy":
+            self.privacy_page.refresh()
+        elif key == "network" and self.net_state["result"] is None:
+            self.network_page.scan()
+        elif key == "guard":
+            self.guard_page.refresh()
 
     # ---------------------------------------------------------- dashboard --
     def _build_dashboard_page(self):
@@ -1100,6 +1120,11 @@ class App(tk.Tk):
     def _check_scan_requests(self):
         """Right-click "Scan with Sentinel": gather every selected path (Explorer starts one
         Sentinel per file) and scan them together once the last one has arrived."""
+        if not self._shredding and scan_requests.pending("shred"):
+            items = scan_requests.take("shred")  # a confirmation comes first, so no need to batch-wait
+            if items:
+                self._show_window()
+                self.after(600, lambda: self.shred_confirm(items + scan_requests.take("shred")))
         if self._scanning or not scan_requests.pending():
             self._request_seen = None
             return
@@ -1116,16 +1141,39 @@ class App(tk.Tk):
             self._show_page("scan")
             self._start_scan(items)
 
-    def _sync_context_menu(self):
-        if not context_menu.supported():
+    @staticmethod
+    def _sync_context_menu():
+        context_menu.sync()  # also re-points the entries after a reinstall, and relabels them
+
+    # ---------------------------------------------------------- shredder --
+    def shred_confirm(self, items):
+        from core import shredder
+
+        allowed, refused = [], []
+        for item in dict.fromkeys(items):
+            reason = shredder.check(Path(item))
+            (refused if reason else allowed).append((item, reason))
+        if refused:
+            messagebox.showwarning("Sentinel", "\n".join(f"{Path(i).name or i}: {t(r)}" for i, r in refused))
+        if not allowed:
             return
-        try:
-            if self.settings.get("context_menu", True):
-                context_menu.enable(t("ctx_scan_with"))  # also re-points it after a reinstall or language change
-            else:
-                context_menu.disable()
-        except OSError:
-            pass
+        paths_ = [i for i, _ in allowed]
+        count = sum(len(shredder.files_in(Path(p))) for p in paths_)
+        names = ", ".join(Path(p).name or p for p in paths_[:3]) + ("…" if len(paths_) > 3 else "")
+        if not messagebox.askyesno(t("shred_title"), t("shred_confirm", n=number(count), names=names),
+                                   icon="warning", default="no"):
+            return
+        self._shredding = True
+        threading.Thread(target=lambda: self.event_queue.put(("shred_done", shredder.shred(paths_))),
+                         daemon=True).start()
+
+    def _on_shred_done(self, result):
+        self._shredding = False
+        done, failed = result
+        text = t("shred_done", n=number(done))
+        if failed:
+            text += "\n\n" + t("shred_failed", names=", ".join(failed[:5]))
+        messagebox.showinfo(t("shred_title"), text)
 
     def _set_protection_indicator(self, on: bool):
         self.protection_on = on
@@ -1502,6 +1550,18 @@ class App(tk.Tk):
         tk.Frame(extras.body, bg=C.BORDER, height=1).pack(fill="x")
         self._setting_toggle(extras.body, "game", t("game_title"), t("game_desc"),
                              self.settings.get("game_mode", True), self._toggle_game_mode)
+        tk.Frame(extras.body, bg=C.BORDER, height=1).pack(fill="x")
+        shred_desc = t("shred_menu_desc") + ("" if context_menu.supported() else t("installed_only"))
+        self._setting_toggle(extras.body, "delete", t("shred_menu_title"), shred_desc,
+                             self.settings.get("shred_menu", True),
+                             lambda sw: self._toggle_setting(sw, "shred_menu", sync_menu=True),
+                             enabled=context_menu.supported())
+        tk.Frame(extras.body, bg=C.BORDER, height=1).pack(fill="x")
+        auto_desc = t("autoupd_desc") + ("" if app_update.can_self_update() else t("installed_only"))
+        self._setting_toggle(extras.body, "refresh", t("autoupd_title"), auto_desc,
+                             self.settings.get("auto_update", True),
+                             lambda sw: self._toggle_setting(sw, "auto_update"),
+                             enabled=app_update.can_self_update())
 
         about = RoundedCard(page, radius=16, padx=24, pady=14)
         about.pack(fill="x", pady=(14, 2))
@@ -1530,6 +1590,14 @@ class App(tk.Tk):
         settings.save(context_menu=on)
         self.settings = settings.load()
         self._sync_context_menu()
+        switch.set(on)
+
+    def _toggle_setting(self, switch, name, sync_menu=False):
+        on = not switch.on
+        settings.save(**{name: on})
+        self.settings = settings.load()
+        if sync_menu:
+            self._sync_context_menu()
         switch.set(on)
 
     def _toggle_game_mode(self, switch):
@@ -1647,6 +1715,12 @@ class App(tk.Tk):
                     self.shield_page.handle(kind, payload)
                 elif kind.startswith("rec_"):
                     self.recovery_page.handle(kind, payload)
+                elif kind.startswith("net_"):
+                    self.network_page.handle(kind, payload)
+                elif kind.startswith("guard_"):
+                    self.guard_page.handle(kind, payload)
+                elif kind == "shred_done":
+                    self._on_shred_done(payload)
                 elif kind == "show":
                     self._show_window()
                 elif kind == "intel_progress":
@@ -1699,10 +1773,11 @@ def main():
         agent.main()
         return
     crashlog.install("window")
-    if context_menu.FLAG in sys.argv:  # right-click "Scan with Sentinel"
-        index = sys.argv.index(context_menu.FLAG)
-        if index + 1 < len(sys.argv):
-            scan_requests.add(sys.argv[index + 1])
+    for flag, kind in ((context_menu.FLAG, "scan"), (context_menu.SHRED_FLAG, "shred")):  # right-click menu
+        if flag in sys.argv:
+            index = sys.argv.index(flag)
+            if index + 1 < len(sys.argv):
+                scan_requests.add(sys.argv[index + 1], kind)
     if not single_instance.UI.acquire():
         single_instance.UI.signal()  # bring the open window to the front instead
         return

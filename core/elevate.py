@@ -143,6 +143,10 @@ def _perform(action: str, args: list[str]):
         from . import shield
 
         shield.elevated(args[0], args[1:])
+    elif action == "browserguard":
+        from . import hijack
+
+        hijack.elevated(args[0], args[1:])
     elif action == "vpnremove":
         from . import vpn
 

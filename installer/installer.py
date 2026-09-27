@@ -81,8 +81,13 @@ def _startup_entry_exists() -> bool:
 
 
 class SetupWizard(tk.Tk):
-    def __init__(self, update_mode: bool = False):
+    def __init__(self, update_mode: bool = False, quiet: bool = False):
         super().__init__()
+        # Quiet: a background update by Sentinel itself. No window at all, and afterwards
+        # only the background protection is restarted (the main window wasn't open).
+        self.quiet = update_mode and quiet
+        if self.quiet:
+            self.withdraw()
         i18n.set_language(saved_language())  # a reinstall keeps the language already chosen
         self.update_mode = update_mode
         self.geometry("500x500")
@@ -127,6 +132,9 @@ class SetupWizard(tk.Tk):
             self._do_install()
         except Exception as e:
             self.progress.stop()
+            if self.quiet:  # nobody's watching: give up quietly, Sentinel tries again later
+                self.destroy()
+                return
             messagebox.showerror(t("setup_title"), t("setup_failed", error=e))
             self.update_mode = False
             self.geometry("500x500")
@@ -335,9 +343,10 @@ class SetupWizard(tk.Tk):
         if self.launch_after_var.get():
             app_exe = INSTALL_DIR / APP_SUBDIR / APP_EXE_NAME
             if app_exe.exists():
-                subprocess.Popen([str(app_exe)], cwd=str(app_exe.parent))
+                args = [str(app_exe), "--agent"] if self.quiet else [str(app_exe)]
+                subprocess.Popen(args, cwd=str(app_exe.parent))
         self.destroy()
 
 
 if __name__ == "__main__":
-    SetupWizard(update_mode="--update" in sys.argv).mainloop()
+    SetupWizard(update_mode="--update" in sys.argv, quiet="--quiet" in sys.argv).mainloop()

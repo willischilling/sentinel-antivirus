@@ -4,6 +4,7 @@ Runs without a main window so protection keeps going after the dashboard is
 closed: watches files and processes, shows threat popups, owns the tray icon,
 and writes to the shared activity log the main window displays.
 """
+import os
 import queue
 import threading
 import time
@@ -15,9 +16,10 @@ import psutil
 import launcher
 import single_instance
 from core import (
-    activity, authenticode, database, elevate, gamemode, i18n, paths, quarantine, recovery, scanner, schedule,
-    settings, signatures, threat_intel, usb, vpn, wifi,
+    activity, app_update, authenticode, context_menu, database, elevate, gamemode, hijack, i18n, netscan, paths, privacy,
+    quarantine, recovery, scanner, schedule, settings, signatures, threat_intel, usb, vpn, wifi,
 )
+from core.version import VERSION
 from core.i18n import number, t
 from gui import clip, configure_style, default_watch_path
 from monitor import file_watcher, process_watcher, ransomware_watcher, startup_watcher
@@ -40,7 +42,8 @@ LANGUAGE_CHECK_SECONDS = 2.0
 GAME_CHECK_SECONDS = 2.0
 # Popups game mode holds until the game is closed. A program already running as a known
 # virus and ransomware-like activity are never held: those can't wait.
-HOLDABLE = {"file", "startup", "usb", "usb_clean", "wifi"}
+HOLDABLE = {"file", "startup", "usb", "usb_clean", "wifi", "newdevice", "hijack"}
+AUTO_UPDATE_EVERY = 6 * 3600
 
 
 def location_name(location: str) -> str:
@@ -99,7 +102,14 @@ class Agent(tk.Tk):
         threading.Thread(target=self._schedule_loop, daemon=True).start()
         threading.Thread(target=self._usb_loop, daemon=True).start()
         threading.Thread(target=self._wifi_loop, daemon=True).start()
+        self._guard_notified = set()
+        threading.Thread(target=self._privacy_loop, daemon=True).start()
+        threading.Thread(target=self._guard_loop, daemon=True).start()
+        threading.Thread(target=self._network_loop, daemon=True).start()
+        threading.Thread(target=self._auto_update_loop, daemon=True).start()
         self.after(100, self._pump)
+        self.after(4000, self._maybe_show_updated)
+        context_menu.sync()  # right after an automatic update, before the window is ever opened
 
     def _sync_language(self):
         """The window saves language and theme changes to the settings file;
@@ -268,6 +278,168 @@ class Agent(tk.Tk):
                      (t("autovpn_trust"), "Ghost.TButton", trust)],
         )
 
+    # --------------------------------------------------------- camera & mic --
+    def _privacy_loop(self):
+        """Notices apps starting to use the camera or microphone (checked every 2 seconds)."""
+        try:
+            active = {(u.device, u.key) for u in privacy.in_use()}  # already in use at start: not new
+        except Exception:
+            active = set()
+        while True:
+            time.sleep(2)
+            try:
+                now = privacy.in_use()
+            except Exception:
+                continue
+            for use in now:
+                if (use.device, use.key) in active:
+                    continue
+                activity.log(t("log_privacy", app=use.name, device=t(f"privacy_dev_{use.device}")), "muted")
+                if privacy.alerts_on() and use.name.lower() not in privacy.allowed():
+                    signature = authenticode.check(Path(use.path)) if use.path else None
+                    signed = bool(signature and signature.signed) or use.path is None  # Store apps are signed
+                    publisher = signature.publisher if signature and signature.signed else None
+                    self.events.put(("privacy", (use, signed, publisher)))
+            active = {(u.device, u.key) for u in now}
+
+    def _on_privacy(self, use, signed, publisher):
+        if not any(u.key == use.key and u.device == use.device for u in privacy.in_use()):
+            return  # already stopped (e.g. held during a game)
+        title = t("privacy_camera_on") if use.device == "webcam" else t("privacy_mic_on")
+        if publisher:
+            detail = t("privacy_signed", publisher=publisher)
+        else:
+            detail = t("privacy_store_app") if signed else t("privacy_unsigned")
+
+        def always_allow():
+            privacy.allow(use.name)
+            return t("privacy_allowed_msg", app=use.name)
+
+        def end_program():
+            ended = 0
+            for proc in psutil.process_iter(["pid", "exe"]):
+                exe = proc.info.get("exe")
+                if exe and use.path and os.path.normcase(exe) == os.path.normcase(use.path):
+                    if process_watcher.kill_process(proc.pid, exe):
+                        ended += 1
+            if not ended:
+                raise RuntimeError(t("err_admin_blocked"))
+            activity.log(t("log_privacy_ended", app=use.name), "muted")
+            return t("msg_program_ended")
+
+        # Two buttons fit; the popup's X is the "fine, I know" answer.
+        end = [(t("btn_end_program"), "Danger.TButton", end_program)] if use.path else []
+        if signed:
+            actions = [(t("privacy_always_allow"), "Accent.TButton", always_allow)] + end
+        else:
+            actions = end + [(t("privacy_always_allow"), "Ghost.TButton", always_allow)]
+        self.toasts.show(title=title, filename=use.name, detail=detail,
+                         location=str(Path(use.path).parent) if use.path else "", accent=C.WARN if signed else C.BAD,
+                         actions=actions, on_error=self._log_failure(use.name))
+        if not signed:
+            self._beep(False)
+
+    # ------------------------------------------------------- browser guard --
+    def _guard_loop(self):
+        """Checks browser policies, the hosts file and proxy settings every 30 seconds."""
+        while True:
+            try:
+                changes = hijack.check()
+                fresh = [c for c in changes if (c.item.key, c.new) not in self._guard_notified]
+                if fresh:
+                    self._guard_notified |= {(c.item.key, c.new) for c in fresh}
+                    self.events.put(("hijack", fresh))
+            except Exception:
+                pass
+            time.sleep(30)
+
+    def _on_hijack(self, changes):
+        first = changes[0]
+        what = f"{first.item.label}: {t(first.item.what)}"
+        if len(changes) > 1:
+            what = t("toast_more", flag=what, n=len(changes) - 1)
+        detail = t("guard_removed") if first.new is None else hijack.describe(first.item)
+        for c in changes:
+            activity.log(t("log_guard", label=c.item.label, what=t(c.item.what), value=hijack.describe(c.item)), "warn")
+
+        def undo():
+            hijack.undo(changes)
+            activity.log(t("log_guard_undone", n=number(len(changes))), "muted")
+            return t("guard_undone")
+
+        def keep():
+            hijack.accept(changes)
+            return t("guard_kept")
+
+        self.toasts.show(title=t("guard_toast_title"), filename=what, detail=detail, location="", accent=C.WARN,
+                         actions=[(t("guard_undo"), "Accent.TButton", undo), (t("btn_keep"), "Ghost.TButton", keep)],
+                         on_error=self._log_failure(t("guard_toast_title")))
+        self._beep(False)
+
+    # ------------------------------------------------------- network devices --
+    def _network_loop(self):
+        """Notices new devices on the home network, only by reading Windows' ARP table."""
+        network, refreshed = None, 0.0
+        time.sleep(30)
+        try:
+            netscan.maker_table()  # the maker list for alerts: downloaded once, refreshed monthly
+        except Exception:
+            pass
+        while True:
+            try:
+                if netscan.alerts_on():
+                    if network is None or time.monotonic() - refreshed > 600:
+                        network, refreshed = netscan.local_network(), time.monotonic()
+                    for ip, mac in netscan.check_new_devices(network):
+                        self.events.put(("newdevice", (ip, mac)))
+            except Exception:
+                network = None  # e.g. offline or switching networks
+            time.sleep(60)
+
+    def _on_new_device(self, ip, mac):
+        maker = netscan.describe(mac)
+        name = maker or (t("net_private_device") if mac[1] in "26ae" else t("net_unknown_device"))
+        activity.log(t("log_new_device", name=name, ip=ip), "warn")
+        self.toasts.show(title=t("net_toast_title"), filename=name, detail=t("net_toast_detail", ip=ip, mac=mac),
+                         location="", accent=C.ACCENT, auto_close_ms=20000,
+                         actions=[(t("autovpn_ok"), "Accent.TButton", lambda: None)])
+
+    # ----------------------------------------------------------- auto-update --
+    def _auto_update_loop(self):
+        """Installs new Sentinel versions in the background (after checking GitHub's checksum),
+        when the main window isn't open and no game is running."""
+        time.sleep(15 * 60)
+        while True:
+            try:
+                if app_update.can_self_update() and app_update.auto_install_on():
+                    release = app_update.latest_release()
+                    if app_update.is_newer(release.version) and not single_instance.UI.is_running() \
+                            and self._game is None:
+                        activity.log(t("log_autoupdate", version=release.version), "muted")
+                        installer = app_update.download(release)
+                        app_update.launch_installer(installer, quiet=True)  # it restarts this agent
+            except Exception as e:
+                activity.log(t("log_autoupdate_failed", error=e), "warn")
+            time.sleep(AUTO_UPDATE_EVERY)
+
+    def _maybe_show_updated(self):
+        seen = settings.load().get("seen_version")
+        if seen != VERSION:
+            settings.save(seen_version=VERSION)
+            if seen and app_update.is_newer(VERSION, seen):
+                self.events.put(("updated", VERSION))
+
+    def _on_updated(self, version):
+        activity.log(t("log_updated", version=version), "muted")
+
+        def whats_new():
+            launcher.open_ui()
+
+        self.toasts.show(title=t("updated_toast_title", version=version), filename="Sentinel Antivirus",
+                         detail=t("updated_toast_detail"), location="", accent=C.GOOD, auto_close_ms=12000,
+                         actions=[(t("updated_open"), "Accent.TButton", whats_new),
+                                  (t("autovpn_ok"), "Ghost.TButton", lambda: None)])
+
     def _update_loop(self):
         """Keeps malware fingerprints and YARA rules current while protecting."""
         while True:
@@ -310,7 +482,9 @@ class Agent(tk.Tk):
         try:
             while processed < 40:
                 kind, payload = self.events.get_nowait()
-                if kind in HOLDABLE and self._game is not None:
+                # Camera/mic use by a signed app (voice chat in a game) can wait; an unsigned one can't.
+                holdable = kind in HOLDABLE or (kind == "privacy" and payload[1])
+                if holdable and self._game is not None:
                     self._held.append((kind, payload))
                     if kind == "file":  # still logged straight away, just no popup
                         self._log_threat(payload)
@@ -331,6 +505,14 @@ class Agent(tk.Tk):
                     self._on_wifi(*payload)
                 elif kind == "ransomware":
                     self._on_ransomware_alert(payload)
+                elif kind == "privacy":
+                    self._on_privacy(*payload)
+                elif kind == "hijack":
+                    self._on_hijack(payload)
+                elif kind == "newdevice":
+                    self._on_new_device(*payload)
+                elif kind == "updated":
+                    self._on_updated(payload)
                 elif kind == "open_ui":
                     launcher.open_ui()
                 elif kind == "turn_off":
