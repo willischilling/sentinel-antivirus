@@ -103,6 +103,7 @@ kbd{
   font-size:clamp(1.6rem,7vw,4rem); letter-spacing:.05em; text-align:center; padding:16px;
   text-shadow:0 6px 26px rgba(0,0,0,.6);
 }
+.banner.small{align-items:flex-start; padding-top:9%; font-size:clamp(.95rem,3.2vw,1.75rem); letter-spacing:.14em}
 .result{font-family:"Chakra Petch",system-ui,sans-serif; font-weight:700; font-size:clamp(1.5rem,5vw,2.6rem); margin:0; text-wrap:balance}
 .resultsub{margin:0; color:var(--dim); font-variant-numeric:tabular-nums}
 .btnrow{display:flex; gap:10px; flex-wrap:wrap; justify-content:center}
@@ -161,7 +162,7 @@ kbd{
 
     <div class="overlay" id="menu">
       <h1 class="logo">Bumper <em>League</em></h1>
-      <p class="tagline">Two cars, one ball, no brakes. Nose it past the other team before the clock runs out.</p>
+      <p class="tagline">Two cars, one ball, no brakes. Nose it past the other team before the clock runs out &mdash; or hit them flat out on boost and take them off the pitch for three seconds.</p>
       <div class="rows">
         <div class="row"><span class="k">Match</span>
           <div class="seg" id="segMode">
@@ -224,7 +225,7 @@ kbd{
 
   <div class="legend">
     <div class="hint">
-      <span>Yellow pads top you up on boost.</span>
+      <span>Yellow pads top you up on boost. Ram an opponent at full boost to demolish them.</span>
       <span class="rotate">Turn your phone sideways for a bigger pitch.</span>
     </div>
     <div class="hint">
@@ -244,6 +245,7 @@ const VIEW={w:F.w+F.goalD*2+PAD*2, h:F.h+PAD*2};
 const MY0=F.h/2-F.goalH/2, MY1=F.h/2+F.goalH/2;
 
 const ACC=940, REV=560, BACC=1450, DRAIN=34, REGEN=5.5;
+const DEMO_SPEED=730, DEMO_OUT=3;
 const VMAX=560, VMAXB=860, VREV=300, TURN=3.55;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -288,6 +290,7 @@ const sfxWall=()=>tone(90,.07,"triangle",.03);
 const sfxPad=()=>tone(660,.09,"sine",.035,1180);
 function sfxGoal(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,.22,"square",.05),i*90)); }
 function sfxWhistle(){ tone(1400,.18,"sine",.04,900); }
+function sfxDemo(){ tone(160,.3,"sawtooth",.07,38); tone(90,.4,"square",.05,30); }
 
 /* ---------- entities ---------- */
 class Car{
@@ -297,8 +300,9 @@ class Car{
     this.x=0; this.y=0; this.a=0; this.vx=0; this.vy=0;
     this.boost=45; this.boosting=false; this.mul=1;
     this.t=0; this.tx=0; this.ty=0; this.jitter=0;
+    this.dead=0; this.rx=0; this.ry=0;
   }
-  reset(x,y,a){ this.x=x; this.y=y; this.a=a; this.vx=0; this.vy=0; this.boosting=false; this.boost=Math.max(this.boost,45); this.t=99; }
+  reset(x,y,a){ this.x=x; this.y=y; this.a=a; this.vx=0; this.vy=0; this.boosting=false; this.boost=Math.max(this.boost,45); this.t=99; this.dead=0; }
   step(dt,inp){
     const sp=Math.hypot(this.vx,this.vy);
     let cs=Math.cos(this.a), sn=Math.sin(this.a);
@@ -550,11 +554,36 @@ function carCar(a,b){
   const nx=dx/d, ny=dy/d, pen=(min-d)/2;
   a.x-=nx*pen; a.y-=ny*pen; b.x+=nx*pen; b.y+=ny*pen;
   const vn=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
+  // judge the demolition on the speeds going in, before the bounce cancels them
+  const da=a.team!==b.team&&canDemo(a,nx,ny), db=a.team!==b.team&&canDemo(b,-nx,-ny);
+  const ax=a.vx, ay=a.vy, bx=b.vx, by=b.vy;
   if(vn<0){
     const j=-1.35*vn/2;
     b.vx+=j*nx; b.vy+=j*ny; a.vx-=j*nx; a.vy-=j*ny;
     if(-vn>260){ sfxHit(.5); burst((a.x+b.x)/2,(a.y+b.y)/2,7,"#ffd166",200); shake=Math.max(shake,5); }
   }
+  if(da&&!db){ a.vx=ax; a.vy=ay; }   // the one who lands it drives straight through
+  if(db&&!da){ b.vx=bx; b.vy=by; }
+  if(da) demolish(b,a);
+  if(db) demolish(a,b);
+}
+// a car demolishes an opponent when it is boosting and closing at supersonic speed
+function canDemo(c,nx,ny){
+  if(!c.boosting||c.dead>0) return false;
+  if(Math.hypot(c.vx,c.vy)<DEMO_SPEED) return false;
+  return (c.vx*nx+c.vy*ny)>DEMO_SPEED*.55;
+}
+function demolish(v,by){
+  if(v.dead>0) return;
+  v.dead=DEMO_OUT; v.vx=0; v.vy=0; v.boosting=false; v.boost=45;
+  const side=v.team===0?0:F.w, dir=v.team===0?1:-1;
+  v.rx=side+dir*90; v.ry=F.h/2+(v.slot?(v.slot%2?-150:150):0);
+  const col=v.team===0?"#49a6ff":"#ff8a43";
+  burst(v.x,v.y,reduceMotion?8:38,col,520);
+  burst(v.x,v.y,reduceMotion?4:18,"#ffd166",360);
+  shake=Math.max(shake,reduceMotion?0:13);
+  sfxDemo();
+  if(v.human||by.human) flash("Demolished",by.team===0?"var(--blue)":"var(--orange)",1100);
 }
 
 /* ---------- match flow ---------- */
@@ -598,11 +627,20 @@ function toggleMute(){
   el.mute.textContent=muted?"Sound off":"Sound on";
   el.mute.setAttribute("aria-pressed",muted?"true":"false");
 }
-let bannerTxt=null;
+let bannerTxt=null, flashId=0;
 function banner(text,color){
   bannerTxt=text;
+  if(!text||el.banner.classList.contains("small")) flashId++;
+  if(text&&arguments.length<3) el.banner.classList.remove("small");
   el.banner.hidden=!text;
   if(text){ el.banner.textContent=text; el.banner.style.color=color||"var(--ink)"; }
+}
+
+function flash(text,color,ms){
+  if(state.phase!=="play"&&state.phase!=="menu") return;
+  banner(text,color); el.banner.classList.add("small");
+  const id=++flashId;
+  setTimeout(()=>{ if(id===flashId&&bannerTxt===text){ banner(null); el.banner.classList.remove("small"); } },ms);
 }
 
 /* ---------- hud ---------- */
@@ -670,18 +708,28 @@ function update(dt){
   }
   if(p==="play"||p==="menu"){
     for(const c of cars){
+      if(c.dead>0){
+        c.dead-=dt;
+        if(c.dead<=0){
+          c.reset(c.rx,c.ry,c.team===0?0:Math.PI);
+          burst(c.x,c.y,reduceMotion?4:12,c.team===0?"#49a6ff":"#ff8a43",180);
+          tone(440,.12,"sine",.04,880);
+        }
+        continue;
+      }
       const inp=c.human?humanInput(c):aiInput(c,dt);
       c.step(dt,inp);
     }
+    const live=cars.filter(c=>c.dead<=0);
     ball.step(dt);
-    for(const c of cars) carBall(c,ball);
-    for(let i=0;i<cars.length;i++) for(let j=i+1;j<cars.length;j++) carCar(cars[i],cars[j]);
-    for(const c of cars) confine(c,.35,false);
+    for(const c of live) carBall(c,ball);
+    for(let i=0;i<live.length;i++) for(let j=i+1;j<live.length;j++) carCar(live[i],live[j]);
+    for(const c of live) confine(c,.35,false);
     confine(ball,.76,true);
     // boost pads
     for(const pd of PADS){
       if(pd.t>0){ pd.t-=dt; continue; }
-      for(const c of cars){
+      for(const c of live){
         if(Math.hypot(c.x-pd.x,c.y-pd.y)<c.r+16&&c.boost<100){
           c.boost=Math.min(100,c.boost+34); pd.t=5;
           burst(pd.x,pd.y,8,"#ffd166",140);
@@ -788,6 +836,22 @@ function drawCar(c){
     ctx.closePath(); ctx.fill();
   }
 }
+function drawRespawn(c){
+  const col=c.team===0?"#49a6ff":"#ff8a43";
+  ctx.save();
+  ctx.translate(c.rx,c.ry);
+  ctx.globalAlpha=.7; ctx.strokeStyle=col; ctx.lineWidth=3;
+  ctx.setLineDash([9,9]); ctx.lineDashOffset=-performance.now()/50;
+  ctx.beginPath(); ctx.arc(0,0,26,0,7); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineWidth=4; ctx.globalAlpha=.9;
+  ctx.beginPath(); ctx.arc(0,0,20,-Math.PI/2,-Math.PI/2+Math.PI*2*(1-c.dead/DEMO_OUT)); ctx.stroke();
+  ctx.fillStyle=col; ctx.globalAlpha=1;
+  ctx.font="700 22px 'Chakra Petch', system-ui, sans-serif";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.fillText(String(Math.ceil(c.dead)),0,1);
+  ctx.restore();
+}
 function draw(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.clearRect(0,0,cssW,cssH);
@@ -854,7 +918,7 @@ function draw(){
     ctx.beginPath(); ctx.arc(t.x,t.y,ball.r*(.4+i/ball.trail.length*.55),0,7); ctx.fill();
   }
   // cars
-  for(const c of cars) drawCar(c);
+  for(const c of cars) c.dead>0?drawRespawn(c):drawCar(c);
   // ball
   ctx.save();
   ctx.fillStyle="rgba(0,0,0,.35)";
