@@ -250,9 +250,9 @@ const VMAX=560, VMAXB=860, VREV=300, TURN=3.55;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const DIFF={
-  rookie:{lead:.05, react:.24, boostP:.22, mul:.78, err:70},
-  pro:{lead:.15, react:.13, boostP:.6, mul:.93, err:30},
-  allstar:{lead:.23, react:.07, boostP:.92, mul:1, err:12}
+  rookie:{lead:.05, react:.24, boostP:.22, mul:.78, err:70, demoP:0},
+  pro:{lead:.15, react:.13, boostP:.6, mul:.93, err:30, demoP:.35},
+  allstar:{lead:.23, react:.07, boostP:.92, mul:1, err:12, demoP:.8}
 };
 
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
@@ -301,8 +301,9 @@ class Car{
     this.boost=45; this.boosting=false; this.mul=1;
     this.t=0; this.tx=0; this.ty=0; this.jitter=0;
     this.dead=0; this.rx=0; this.ry=0;
+    this.hunt=null; this.huntT=0;
   }
-  reset(x,y,a){ this.x=x; this.y=y; this.a=a; this.vx=0; this.vy=0; this.boosting=false; this.boost=Math.max(this.boost,45); this.t=99; this.dead=0; }
+  reset(x,y,a){ this.x=x; this.y=y; this.a=a; this.vx=0; this.vy=0; this.boosting=false; this.boost=Math.max(this.boost,45); this.t=99; this.dead=0; this.hunt=null; this.huntT=0; }
   step(dt,inp){
     const sp=Math.hypot(this.vx,this.vy);
     let cs=Math.cos(this.a), sn=Math.sin(this.a);
@@ -449,8 +450,14 @@ function aiInput(c,dt){
   const dir=c.team===0?1:-1;
   const goalX=c.team===0?F.w:0, ownX=c.team===0?0:F.w;
   c.t+=dt;
+  // a hunt runs on its own clock and is dropped once it goes stale
+  if(c.hunt){
+    c.huntT-=dt;
+    if(c.hunt.dead>0||c.huntT<=0||c.boost<14) c.hunt=null;
+  }
   if(c.t>d.react){
     c.t=0;
+    if(!c.hunt&&d.demoP>0&&c.boost>48&&Math.random()<d.demoP) c.hunt=pickVictim(c);
     const bx=ball.x+ball.vx*d.lead, by=ball.y+ball.vy*d.lead;
     let tx,ty;
     const mates=cars.filter(x=>x.team===c.team).length;
@@ -462,8 +469,12 @@ function aiInput(c,dt){
       const off=ball.r+c.r+8;
       tx=bx-gx/gl*off; ty=by-gy/gl*off;
     }
+    if(c.hunt){
+      // aim where they will be, not where they are
+      tx=c.hunt.x+c.hunt.vx*.18; ty=c.hunt.y+c.hunt.vy*.18;
+    }
     let pad=null, best=1e9;
-    if(c.boost<28){
+    if(!c.hunt&&c.boost<28){
       for(const p of PADS){
         if(p.t>0) continue;
         const dd=Math.hypot(p.x-c.x,p.y-c.y);
@@ -471,8 +482,9 @@ function aiInput(c,dt){
       }
     }
     if(pad){ tx=pad.x; ty=pad.y; }
-    c.tx=clamp(tx+rnd(-d.err,d.err),-40,F.w+40);
-    c.ty=clamp(ty+rnd(-d.err,d.err),20,F.h-20);
+    const err=c.hunt?d.err*.3:d.err;
+    c.tx=clamp(tx+rnd(-err,err),-40,F.w+40);
+    c.ty=clamp(ty+rnd(-err,err),20,F.h-20);
     c.jitter=Math.random();
   }
   const ang=Math.atan2(c.ty-c.y,c.tx-c.x);
@@ -481,8 +493,26 @@ function aiInput(c,dt){
   let gas=1, steer=clamp(diff*2.4,-1,1);
   if(Math.abs(diff)>2.05){ gas=-1; steer=clamp(-diff*2.4,-1,1); }
   else if(dist<46&&Math.abs(diff)>1.1){ gas=-.7; steer=clamp(-diff,-1,1); }
-  const boost=Math.abs(diff)<.34&&dist>190&&c.boost>16&&c.jitter<d.boostP;
+  const boost=c.hunt
+    ? (Math.abs(diff)<.5&&c.boost>0&&gas>0)
+    : (Math.abs(diff)<.34&&dist>190&&c.boost>16&&c.jitter<d.boostP);
   return {gas,steer,boost};
+}
+// Pick an opponent worth running down: one who would beat us to the ball anyway,
+// close enough to reach on a tank of boost and already roughly in front of us.
+function pickVictim(c){
+  const mine=Math.hypot(ball.x-c.x,ball.y-c.y);
+  let best=null, bd=1e9;
+  for(const o of cars){
+    if(o.team===c.team||o.dead>0) continue;
+    const dd=Math.hypot(o.x-c.x,o.y-c.y);
+    if(dd<170||dd>560||dd>=bd) continue;
+    if(Math.hypot(ball.x-o.x,ball.y-o.y)>mine) continue;
+    if(Math.abs(wrapAng(Math.atan2(o.y-c.y,o.x-c.x)-c.a))>.9) continue;
+    bd=dd; best=o;
+  }
+  if(best) c.huntT=1.4;
+  return best;
 }
 
 /* ---------- collisions ---------- */
