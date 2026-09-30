@@ -51,6 +51,7 @@ body{
 .bar{width:74px; max-width:22vw; height:7px; border-radius:99px; background:#0d111a; border:1px solid var(--edge); overflow:hidden}
 .bar i{display:block; height:100%; width:100%; background:linear-gradient(90deg,#ffb347,var(--boost)); transform-origin:left; border-radius:99px}
 /* stage */
+.stage:focus-visible{outline:2px solid var(--boost); outline-offset:2px}
 .stage{
   position:relative; width:100%; aspect-ratio:1484/860; max-width:100%;
   border:1px solid var(--edge); border-radius:14px; overflow:hidden;
@@ -156,7 +157,7 @@ kbd{
     </div>
   </div>
 
-  <div class="stage" id="stage">
+  <div class="stage" id="stage" tabindex="0">
     <canvas id="cv"></canvas>
     <div class="banner" id="banner" hidden></div>
 
@@ -190,6 +191,7 @@ kbd{
       <div class="keys">
         <span><b>Azure</b> <kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd> drive &middot; <kbd>Space</kbd> boost</span>
         <span><b>Ember</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> drive &middot; <kbd>Shift</kbd> boost</span>
+        <span><b>Mouse</b> aim at the cursor &middot; hold <b>left</b> to drive, <b>right</b> to boost</span>
       </div>
     </div>
 
@@ -225,10 +227,11 @@ kbd{
 
   <div class="legend">
     <div class="hint">
-      <span>Yellow pads top you up on boost. Ram an opponent at full boost to demolish them.</span>
+      <span>Keys not working? Click the pitch first, or hold the left mouse button to drive.</span>
       <span class="rotate">Turn your phone sideways for a bigger pitch.</span>
     </div>
     <div class="hint">
+      <button id="padBtn" aria-pressed="false">Touch buttons</button>
       <button id="muteBtn" aria-pressed="false">Sound on</button>
       <button id="pauseBtn">Pause</button>
     </div>
@@ -301,7 +304,7 @@ class Car{
     this.boost=45; this.boosting=false; this.mul=1;
     this.t=0; this.tx=0; this.ty=0; this.jitter=0;
     this.dead=0; this.rx=0; this.ry=0;
-    this.hunt=null; this.huntT=0;
+    this.hunt=null; this.huntT=0; this.rev=false;
   }
   reset(x,y,a){ this.x=x; this.y=y; this.a=a; this.vx=0; this.vy=0; this.boosting=false; this.boost=Math.max(this.boost,45); this.t=99; this.dead=0; this.hunt=null; this.huntT=0; }
   step(dt,inp){
@@ -406,21 +409,49 @@ function kickoff(count){
 /* ---------- input ---------- */
 const keys=Object.create(null);
 const KEYCODES=["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space","KeyW","KeyA","KeyS","KeyD","ShiftLeft","ShiftRight"];
+let gotInput=false;
 addEventListener("keydown",e=>{
-  if(KEYCODES.indexOf(e.code)>=0) e.preventDefault();
+  if(KEYCODES.indexOf(e.code)>=0){ e.preventDefault(); gotInput=true; }
   keys[e.code]=true;
   if(e.code==="KeyP"||e.code==="Escape") togglePause();
   if(e.code==="KeyM") toggleMute();
-},{passive:false});
-addEventListener("keyup",e=>{ keys[e.code]=false; });
+},{passive:false,capture:true});
+addEventListener("keyup",e=>{ keys[e.code]=false; },{capture:true});
 addEventListener("blur",()=>{ for(const k in keys) keys[k]=false; });
+// the game runs in a frame, so keys only arrive once this document holds focus
+function grabFocus(){ try{ window.focus(); }catch(e){} try{ stage.focus({preventScroll:true}); }catch(e){} }
+addEventListener("pointerdown",grabFocus,true);
+addEventListener("load",grabFocus);
+grabFocus();
+
+/* mouse driving: your car aims at the pointer, left button drives, right boosts */
+const mouse={x:0,y:0,over:false,gas:false,boost:false};
+function aimAt(e){
+  const r=stage.getBoundingClientRect();
+  const sc=Math.min(r.width/VIEW.w,r.height/VIEW.h);
+  mouse.x=(e.clientX-r.left-(r.width-VIEW.w*sc)/2)/sc-(PAD+F.goalD);
+  mouse.y=(e.clientY-r.top-(r.height-VIEW.h*sc)/2)/sc-PAD;
+  mouse.over=true;
+}
+// read the button bitmask, not the button that changed: pressing a second button
+// while one is already held fires pointermove rather than pointerdown
+function buttons(e){
+  if(e.pointerType&&e.pointerType!=="mouse") return;
+  mouse.gas=!!(e.buttons&1); mouse.boost=!!(e.buttons&2);
+  if(e.buttons) gotInput=true;
+}
+stage.addEventListener("pointermove",e=>{ aimAt(e); buttons(e); });
+stage.addEventListener("pointerdown",e=>{ aimAt(e); buttons(e); });
+addEventListener("pointerup",buttons);
+stage.addEventListener("contextmenu",e=>e.preventDefault());
+stage.addEventListener("pointerleave",()=>{ mouse.over=false; mouse.gas=false; mouse.boost=false; });
 
 const touch={left:false,right:false,gas:false,rev:false,boost:false};
-if(matchMedia("(hover: none)").matches||"ontouchstart" in window){
-  el.touchpad.hidden=false;
+{
+  el.touchpad.hidden=!(matchMedia("(hover: none)").matches||"ontouchstart" in window);
   el.touchpad.querySelectorAll(".tbtn").forEach(b=>{
     const k=b.dataset.t;
-    const on=e=>{ e.preventDefault(); touch[k]=true; b.classList.add("on"); };
+    const on=e=>{ e.preventDefault(); touch[k]=true; gotInput=true; b.classList.add("on"); };
     const off=e=>{ e.preventDefault(); touch[k]=false; b.classList.remove("on"); };
     b.addEventListener("pointerdown",on); b.addEventListener("pointerup",off);
     b.addEventListener("pointercancel",off); b.addEventListener("pointerleave",off);
@@ -436,6 +467,15 @@ function humanInput(c){
     if(touch.gas) gas+=1; if(touch.rev) gas-=1;
     if(touch.left) steer-=1; if(touch.right) steer+=1;
     if(touch.boost) boost=true;
+    if(mouse.over&&(mouse.gas||mouse.boost)){
+      const dif=wrapAng(Math.atan2(mouse.y-c.y,mouse.x-c.x)-c.a);
+      // hysteresis: commit to backing up until the nose has swung most of the way round,
+      // otherwise the car dithers on the spot at the switchover angle
+      if(c.rev) c.rev=Math.abs(dif)>1.5; else c.rev=Math.abs(dif)>2.2;
+      if(c.rev){ gas=-1; steer=clamp(-dif*2.4,-1,1); }
+      else{ gas=1; steer=clamp(dif*2.4,-1,1); }
+      if(mouse.boost) boost=true;
+    }else c.rev=false;
   }else{
     if(keys.KeyW) gas+=1; if(keys.KeyS) gas-=1;
     if(keys.KeyA) steer-=1; if(keys.KeyD) steer+=1;
@@ -617,11 +657,19 @@ function demolish(v,by){
 }
 
 /* ---------- match flow ---------- */
+let nudged=false;
+function nudge(){
+  if(nudged||gotInput||state.phase!=="play") return;
+  nudged=true;
+  flash("Click the pitch, then drive","var(--boost)",2600);
+}
 function startMatch(){
+  grabFocus();
   state.score=[0,0]; state.overtime=false; state.clock=state.len;
   state.phase="play"; buildCars(); kickoff(true);
   el.menu.hidden=true; el.end.hidden=true; el.pause.hidden=true;
   audio(); sfxWhistle(); syncHud();
+  setTimeout(nudge,4000);
 }
 function toMenu(){
   state.phase="menu"; state.score=[0,0]; state.clock=state.len; state.overtime=false;
@@ -716,6 +764,11 @@ document.getElementById("resumeBtn").addEventListener("click",togglePause);
 document.getElementById("quitBtn").addEventListener("click",toMenu);
 document.getElementById("pauseBtn").addEventListener("click",togglePause);
 el.mute.addEventListener("click",toggleMute);
+document.getElementById("padBtn").addEventListener("click",function(){
+  el.touchpad.hidden=!el.touchpad.hidden;
+  this.setAttribute("aria-pressed",el.touchpad.hidden?"false":"true");
+  grabFocus();
+});
 
 /* ---------- update ---------- */
 function update(dt){
@@ -946,6 +999,12 @@ function draw(){
     const t=ball.trail[i], a=(i/ball.trail.length)*.3;
     ctx.fillStyle="rgba(244,241,230,"+a+")";
     ctx.beginPath(); ctx.arc(t.x,t.y,ball.r*(.4+i/ball.trail.length*.55),0,7); ctx.fill();
+  }
+  if(mouse.over&&(mouse.gas||mouse.boost)){
+    ctx.strokeStyle="rgba(240,234,220,.5)"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(mouse.x,mouse.y,11,0,7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mouse.x-17,mouse.y); ctx.lineTo(mouse.x-5,mouse.y);
+    ctx.moveTo(mouse.x+5,mouse.y); ctx.lineTo(mouse.x+17,mouse.y); ctx.stroke();
   }
   // cars
   for(const c of cars) c.dead>0?drawRespawn(c):drawCar(c);
