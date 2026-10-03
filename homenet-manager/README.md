@@ -78,10 +78,16 @@ homenet/
   ui.py                the Tkinter window
 ```
 
-## Building a single .exe (optional)
+## Building a single double-clickable .exe
+
+Easiest: **double-click `build.bat`**. It installs the build tool, builds the
+app, and leaves `dist\HomeNetManager.exe` — a single file you can double-click
+or drag to your Desktop. (You still need Python installed first.)
+
+Or by hand:
 
 ```powershell
-pip install pyinstaller
+pip install pyinstaller psutil
 pyinstaller --noconsole --onefile --name "HomeNetManager" main.py
 ```
 
