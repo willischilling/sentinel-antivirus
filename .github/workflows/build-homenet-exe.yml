@@ -1,0 +1,44 @@
+name: Build Home Network Manager (.exe)
+
+# Builds the standalone Home Network Manager app into a single Windows .exe on a
+# cloud Windows machine, so you can download it without building anything
+# yourself. Runs on every push that touches the app, and can be started by hand
+# from the Actions tab (Run workflow).
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/epic-albattani-zpmehu
+    paths:
+      - 'homenet-manager/**'
+      - '.github/workflows/build-homenet-exe.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools and dependency
+        working-directory: homenet-manager
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller psutil
+
+      - name: Build the .exe
+        working-directory: homenet-manager
+        run: python -m PyInstaller --noconsole --onefile --name HomeNetManager main.py
+
+      - name: Upload the .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: HomeNetManager-exe
+          path: homenet-manager/dist/HomeNetManager.exe
+          if-no-files-found: error
