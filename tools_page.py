@@ -69,6 +69,7 @@ class ToolsPage(tk.Frame):
             ("tools_sec_privacy", [
                 ("scan", t("privacy_title"), t("tools_privacy_desc"), self._privacy_status(), "privacy"),
                 ("globe", t("net_title"), t("tools_net_desc"), self._net_status(), "network"),
+                ("power", t("hn_title"), t("tools_hn_desc"), self._homenet_status(), "homenet"),
                 ("web", t("guard_title"), t("tools_guard_desc"), self._guard_status(), "guard"),
                 ("warning", t("link_title"), t("tools_link_desc"), self._link_status(), "linkguard"),
             ]),
@@ -136,6 +137,16 @@ class ToolsPage(tk.Frame):
         if result is None:
             return t("tools_net_none"), C.TEXT_MUTED
         return t("net_found", n=number(len(result.devices))), C.ACCENT
+
+    def _homenet_status(self):
+        result = self.app.homenet_state["result"]
+        if result is None:
+            return t("tools_hn_none"), C.TEXT_MUTED
+        from core import homenet
+        paused = homenet.paused_count(result.network_id)
+        if paused:
+            return t("hn_paused_n", n=number(paused)), C.WARN
+        return t("hn_all_on"), C.GOOD
 
     def _breach_status(self):
         result = self.app.breach_state["result"]
