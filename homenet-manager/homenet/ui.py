@@ -4,12 +4,21 @@ Scan your network, give devices names and profiles, pause or resume their
 internet, and block websites. Long or privileged jobs run on worker threads
 and report back through a queue the UI polls, so the window never freezes.
 """
+import os
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
 from . import APP_NAME, control, dns, firewall, netscan, watcher
+
+
+def _resource(rel: str) -> str:
+    """Path to a bundled file, both when run from source and from a PyInstaller
+    one-file build (which unpacks data into sys._MEIPASS)."""
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return os.path.join(base, rel)
 
 # ---- palette -------------------------------------------------------------
 BG = "#0b1120"
@@ -37,6 +46,10 @@ class App(tk.Tk):
         self.geometry("760x820")
         self.minsize(620, 560)
         self.configure(bg=BG)
+        try:
+            self.iconbitmap(_resource("assets/icon.ico"))  # Windows window/taskbar icon
+        except Exception:
+            pass
         self._style()
         self.events: "queue.Queue" = queue.Queue()
         self.result: netscan.ScanResult | None = None

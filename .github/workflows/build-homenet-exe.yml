@@ -37,7 +37,7 @@ jobs:
 
       - name: Build the .exe
         working-directory: homenet-manager
-        run: python -m PyInstaller --noconsole --onefile --name HomeNetManager main.py
+        run: python -m PyInstaller --noconsole --onefile --name HomeNetManager --icon assets/icon.ico "--add-data=assets/icon.ico;assets" main.py
 
       - name: Upload the .exe
         uses: actions/upload-artifact@v4

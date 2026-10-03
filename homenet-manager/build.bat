@@ -30,7 +30,7 @@ if errorlevel 1 (
 
 echo.
 echo Building the app... (this takes a minute)
-python -m PyInstaller --noconsole --onefile --name "HomeNetManager" main.py
+python -m PyInstaller --noconsole --onefile --name "HomeNetManager" --icon "assets\icon.ico" --add-data "assets\icon.ico;assets" main.py
 
 echo.
 if exist "dist\HomeNetManager.exe" (
