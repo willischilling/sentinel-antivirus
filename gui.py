@@ -40,7 +40,6 @@ from shield_page import ShieldPage, new_state as new_shield_state
 from recovery_page import RecoveryPage
 from privacy_page import PrivacyPage
 from network_page import NetworkPage, new_state as new_net_state
-from homenet_page import HomeNetPage, new_state as new_homenet_state
 from guard_page import GuardPage, new_state as new_guard_state
 from shred_page import ShredPage
 from breach_page import BreachPage, new_state as new_breach_state
@@ -51,7 +50,7 @@ from report_page import ReportPage
 
 # Pages opened from another one: the sidebar keeps that one highlighted.
 PARENT_PAGE = {"security": "dashboard", "recovery": "tools", "extensions": "tools", "cleaner": "tools",
-               "shield": "protection", "privacy": "tools", "network": "tools", "homenet": "tools", "guard": "tools", "shred": "tools", "breach": "tools", "startup": "tools", "linkguard": "tools",
+               "shield": "protection", "privacy": "tools", "network": "tools", "guard": "tools", "shred": "tools", "breach": "tools", "startup": "tools", "linkguard": "tools",
                "sandbox": "tools", "report": "tools"}
 
 
@@ -206,7 +205,6 @@ class App(tk.Tk):
         self.clean_state = new_clean_state()
         self.shield_state = new_shield_state()
         self.net_state = new_net_state()
-        self.homenet_state = new_homenet_state()
         self.guard_state = new_guard_state()
         self.breach_state = new_breach_state()
         self.startup_state = new_startup_state()
@@ -355,8 +353,6 @@ class App(tk.Tk):
         self.pages["privacy"] = self.privacy_page
         self.network_page = NetworkPage(self.content, self)
         self.pages["network"] = self.network_page
-        self.homenet_page = HomeNetPage(self.content, self)
-        self.pages["homenet"] = self.homenet_page
         self.guard_page = GuardPage(self.content, self)
         self.pages["guard"] = self.guard_page
         self.pages["shred"] = ShredPage(self.content, self)
@@ -1748,8 +1744,6 @@ class App(tk.Tk):
                     self.recovery_page.handle(kind, payload)
                 elif kind.startswith("net_"):
                     self.network_page.handle(kind, payload)
-                elif kind.startswith("homenet_"):
-                    self.homenet_page.handle(kind, payload)
                 elif kind.startswith("guard_"):
                     self.guard_page.handle(kind, payload)
                 elif kind == "shred_done":

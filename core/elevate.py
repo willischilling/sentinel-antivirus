@@ -139,10 +139,6 @@ def _perform(action: str, args: list[str]):
         from . import firewall
 
         firewall.elevated(args[0], args[1:])
-    elif action == "homenet":
-        from . import homenet
-
-        homenet.elevated(args[0], args[1:])
     elif action == "shield":
         from . import shield
 

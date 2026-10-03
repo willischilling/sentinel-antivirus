@@ -18,7 +18,6 @@ from pathlib import Path
 
 GROUP = "Sentinel Antivirus"
 LOCKDOWN_RULE = "Sentinel: Lockdown"
-PAUSE_RULE = "Sentinel: Internet Paused"  # Home Network "pause" for this PC
 BLOCK_PREFIX = "Sentinel: Block "
 PROFILES = {1: "domain", 2: "private", 4: "public"}
 CREATE_NO_WINDOW = 0x08000000
@@ -116,24 +115,6 @@ def turn_on():
 
 def set_mode(mode: str):
     _elevated("mode", mode)
-
-
-def pause_internet():
-    """Cut all outbound traffic for this PC (Home Network "pause"). Reversible."""
-    _elevated("mode", "pause")
-
-
-def resume_internet():
-    """Allow outbound traffic again (Home Network "resume")."""
-    _elevated("mode", "resume")
-
-
-def internet_paused() -> bool:
-    """Whether this PC's internet is currently paused (reads state, no admin prompt)."""
-    script = ("$fw = New-Object -ComObject HNetCfg.FwPolicy2; "
-              "@($fw.Rules | Where-Object { $_.Name -eq " + _q(PAUSE_RULE) + " -and $_.Enabled }).Count")
-    out = _run_ps(script, timeout=30).stdout.strip()
-    return out.isdigit() and int(out) > 0
 
 
 def block_app(path: str):
@@ -236,13 +217,6 @@ def elevated(action: str, args: list[str]):
         if lockdown:
             # A block rule beats every allow rule, so this stops all outgoing traffic too.
             script.append(_new_rule(LOCKDOWN_RULE, 2, description="All network traffic blocked by Sentinel"))
-    elif action == "mode" and args and args[0] in ("pause", "resume"):
-        # A block rule beats every allow rule, so this cuts all outgoing traffic
-        # without changing the firewall's mode, inbound rules, or anything else.
-        script.append(_remove_rules(PAUSE_RULE))
-        if args[0] == "pause":
-            script += [f"$fw.FirewallEnabled({t}) = $true" for t in PROFILES]
-            script.append(_new_rule(PAUSE_RULE, 2, description="Internet paused by Sentinel Home Network"))
     elif action == "block" and args:
         path = args[0]
         if not (Path(path).is_file() and path.lower().endswith(".exe")):
