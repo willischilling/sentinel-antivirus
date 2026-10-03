@@ -1,9 +1,9 @@
 name: Build Home Network Manager (.exe)
 
-# Builds the standalone Home Network Manager app into a single Windows .exe on a
-# cloud Windows machine, so you can download it without building anything
-# yourself. Runs on every push that touches the app, and can be started by hand
-# from the Actions tab (Run workflow).
+# Builds the standalone Home Network Manager app on a cloud Windows machine as a
+# one-FOLDER app (exe + its files), which is robust against antivirus
+# false-positives and does not unpack to a temp folder at launch. The result is
+# zipped and published to the dist-exe branch so it can be fetched over git.
 
 on:
   workflow_dispatch:
@@ -35,24 +35,27 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller psutil
 
-      - name: Build the .exe
+      - name: Build (one folder, with icon)
         working-directory: homenet-manager
-        run: python -m PyInstaller --noconsole --onefile --name HomeNetManager --icon assets/icon.ico "--add-data=assets/icon.ico;assets" main.py
+        run: python -m PyInstaller --noconsole --name HomeNetManager --icon assets/icon.ico "--add-data=assets/icon.ico;assets" main.py
 
-      - name: Upload the .exe
+      - name: Zip the app folder
+        shell: pwsh
+        run: Compress-Archive -Path homenet-manager/dist/HomeNetManager -DestinationPath HomeNetManager.zip -Force
+
+      - name: Upload the zip as an artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HomeNetManager-exe
-          path: homenet-manager/dist/HomeNetManager.exe
+          name: HomeNetManager
+          path: HomeNetManager.zip
           if-no-files-found: error
 
-      - name: Publish the .exe to the dist-exe branch
+      - name: Publish the zip to the dist-exe branch
         shell: bash
         run: |
-          cp homenet-manager/dist/HomeNetManager.exe ./HomeNetManager.exe
           git checkout --orphan dist-exe
           git reset
-          git add -f HomeNetManager.exe
+          git add -f HomeNetManager.zip
           git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
-              commit -m "Built HomeNetManager.exe"
+              commit -m "Built HomeNetManager (one-folder) zip"
           git push -f origin dist-exe

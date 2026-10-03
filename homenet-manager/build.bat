@@ -30,16 +30,18 @@ if errorlevel 1 (
 
 echo.
 echo Building the app... (this takes a minute)
-python -m PyInstaller --noconsole --onefile --name "HomeNetManager" --icon "assets\icon.ico" --add-data "assets\icon.ico;assets" main.py
+python -m PyInstaller --noconsole --name "HomeNetManager" --icon "assets\icon.ico" --add-data "assets\icon.ico;assets" main.py
 
 echo.
-if exist "dist\HomeNetManager.exe" (
-  echo ========================================================
-  echo  Done!  Your app is here:  dist\HomeNetManager.exe
-  echo  Double-click it to run, or drag it to your Desktop.
-  echo ========================================================
+if exist "dist\HomeNetManager\HomeNetManager.exe" (
+  echo ============================================================
+  echo  Done!  Your app is the folder:  dist\HomeNetManager
+  echo  Open it and double-click HomeNetManager.exe to run.
+  echo  Keep the folder together; you can move the whole folder
+  echo  anywhere (Desktop, etc.) and make a shortcut to the exe.
+  echo ============================================================
 ) else (
-  echo Build did not produce the exe. Scroll up to see what went wrong.
+  echo Build did not produce the app. Scroll up to see what went wrong.
 )
 echo.
 pause
