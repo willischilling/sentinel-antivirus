@@ -3552,6 +3552,10 @@ EN.update({
     "hn_sites_none": "No extra sites blocked yet.",
     "hn_sites_remove": "Remove",
     "hn_sites_prompt": "Website to block (e.g. example.com):",
+    "hn_enforce": "Keep these blocks enforced",
+    "hn_enforce_desc": "Sentinel checks every few minutes and puts the blocks back if something "
+                       "removes or changes them. Restoring them asks for the Windows admin prompt once.",
+    "log_hn_reapplied": "Home Network: website blocks were changed, so {n} were put back",
     "tools_guard_desc": "Watches for anything forcing your browser's homepage, search engine or extensions.",
     "tools_guard_ok": "Nothing suspicious",
     "tools_shred_desc": "Delete files so recovery tools can't bring them back.",

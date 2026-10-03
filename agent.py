@@ -16,7 +16,7 @@ import psutil
 import launcher
 import single_instance
 from core import (
-    activity, app_update, authenticode, context_menu, database, linkguard, report, scan_requests, elevate, gamemode, hijack, i18n, netscan, paths, privacy,
+    activity, app_update, authenticode, context_menu, database, linkguard, report, scan_requests, elevate, gamemode, hijack, homenet, i18n, netscan, paths, privacy,
     quarantine, recovery, scanner, schedule, settings, signatures, threat_intel, usb, vpn, wifi,
 )
 from core.version import VERSION
@@ -44,6 +44,7 @@ GAME_CHECK_SECONDS = 2.0
 # virus and ransomware-like activity are never held: those can't wait.
 HOLDABLE = {"file", "startup", "usb", "usb_clean", "wifi", "newdevice", "hijack"}
 AUTO_UPDATE_EVERY = 6 * 3600
+HOMENET_CHECK_SECONDS = 300  # re-check the Home Network website blocks every 5 minutes
 
 
 def location_name(location: str) -> str:
@@ -109,6 +110,7 @@ class Agent(tk.Tk):
         threading.Thread(target=self._privacy_loop, daemon=True).start()
         threading.Thread(target=self._guard_loop, daemon=True).start()
         threading.Thread(target=self._network_loop, daemon=True).start()
+        threading.Thread(target=self._homenet_loop, daemon=True).start()
         threading.Thread(target=self._auto_update_loop, daemon=True).start()
         threading.Thread(target=self._report_loop, daemon=True).start()
         self.after(100, self._pump)
@@ -399,6 +401,30 @@ class Agent(tk.Tk):
             except Exception:
                 network = None  # e.g. offline or switching networks
             time.sleep(60)
+
+    def _homenet_loop(self):
+        """Keeps the Home Network website blocks in place: if something removes
+        or changes Sentinel's block in the hosts file, puts it back.
+
+        Only reads the hosts file each tick (no admin). A re-apply needs the one
+        Windows admin prompt, so it's edge-triggered — it acts once when drift
+        first appears, not every tick, and won't ask again for the same list
+        until it has been restored or the list changes."""
+        time.sleep(45)
+        acted_on = None  # the blocklist we last tried to restore, to avoid re-prompting
+        while True:
+            try:
+                if homenet.enforce_on() and homenet.needs_reapply():
+                    want = tuple(sorted(homenet.active_blocklist()))
+                    if want != acted_on:
+                        acted_on = want
+                        homenet.reapply()  # one admin prompt; raises if declined
+                        activity.log(t("log_hn_reapplied", n=number(len(want))), "warn")
+                else:
+                    acted_on = None  # consistent again (or enforcement off): allow future prompts
+            except Exception:
+                pass  # declined prompt or transient error; try again on the next change
+            time.sleep(HOMENET_CHECK_SECONDS)
 
     def _on_new_device(self, ip, mac):
         maker = netscan.describe(mac)

@@ -247,6 +247,19 @@ class HomeNetPage(tk.Frame):
         desc.pack(anchor="w", fill="x", pady=(8, 12))
         wrap_to_width(desc, card.body)
 
+        # Keep blocks enforced: the background agent re-applies the list if it's changed.
+        enforce = tk.Frame(card.body, bg=C.CARD)
+        enforce.pack(fill="x", pady=(0, 10))
+        ToggleSwitch(enforce, on=homenet.enforce_on(), command=self._toggle_enforce).pack(side="right")
+        ecol = tk.Frame(enforce, bg=C.CARD)
+        ecol.pack(side="left", fill="x", expand=True)
+        tk.Label(ecol, text=_t("hn_enforce"), font=FONT, fg=C.TEXT, bg=C.CARD, anchor="w").pack(anchor="w")
+        enote = tk.Label(ecol, text=_t("hn_enforce_desc"), font=FONT_SMALL, fg=C.TEXT_MUTED, bg=C.CARD,
+                         justify="left", anchor="w")
+        enote.pack(anchor="w", fill="x")
+        wrap_to_width(enote, ecol)
+        tk.Frame(card.body, bg=C.BORDER, height=1).pack(fill="x", pady=(0, 10))
+
         conf = homenet.net_config(result.network_id)[1]
         active = set(conf.get("categories", []))
         for key in homenet.CATEGORIES:
@@ -278,6 +291,10 @@ class HomeNetPage(tk.Frame):
             remove.bind("<Button-1>", lambda e, d=domain: self._remove_site(result, d))
             icon_label(srow, "warning", 11, fg=C.WARN).pack(side="left", padx=(2, 8))
             tk.Label(srow, text=domain, font=FONT_SMALL, fg=C.TEXT, bg=C.CARD).pack(side="left")
+
+    def _toggle_enforce(self):
+        homenet.set_enforce(not homenet.enforce_on())
+        self._render()
 
     def _toggle_cat(self, result, key):
         conf = homenet.net_config(result.network_id)[1]

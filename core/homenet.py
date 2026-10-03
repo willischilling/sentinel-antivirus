@@ -194,15 +194,89 @@ def blocked_domains(network_id: str) -> list[str]:
 
 def apply_site_blocks(network_id: str):
     """Write the current blocklist into Windows' hosts file (one admin prompt),
-    and turn the family DNS filter on/off depending on the 'adult' category."""
+    and turn the family DNS filter on/off depending on the 'adult' category.
+    Records the applied list as the "active" set so the background agent can
+    keep it in place (see reapply())."""
     from . import elevate, webprotect
 
     domains = blocked_domains(network_id)
     elevate.run("homenet", "hosts", json.dumps(domains))
+    _set_active(domains, enforce=True)
     _data, conf = net_config(network_id)
     if "adult" in conf.get("categories", []):
         if webprotect.status().level != "family":
             webprotect.enable("family")
+
+
+# ------------------------------------------- staying applied (the agent) --
+def _active() -> dict:
+    data = _all().get("active")
+    if not isinstance(data, dict):
+        return {"domains": [], "enforce": False}
+    return {"domains": list(data.get("domains") or []), "enforce": bool(data.get("enforce"))}
+
+
+def _set_active(domains: list[str], enforce: bool):
+    data = _all()
+    data["active"] = {"domains": sorted(set(domains)), "enforce": enforce}
+    _save(data)
+
+
+def active_blocklist() -> list[str]:
+    """The domains last applied to this PC (what the agent keeps enforced)."""
+    return _active()["domains"]
+
+
+def enforce_on() -> bool:
+    """Whether the agent should keep the active blocklist in place."""
+    return _active()["enforce"] and bool(_active()["domains"])
+
+
+def set_enforce(on: bool):
+    data = _all()
+    active = data.get("active")
+    if not isinstance(active, dict):
+        active = {"domains": [], "enforce": False}
+    active["enforce"] = bool(on)
+    data["active"] = active
+    _save(data)
+
+
+def current_hosts_domains() -> set[str]:
+    """The base domains Sentinel's block currently holds in the hosts file.
+    Read-only — no admin rights needed, so the agent can check often."""
+    try:
+        with open(HOSTS, "r", encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+    except OSError:
+        return set()
+    if BEGIN not in text or END not in text:
+        return set()
+    block = text.split(BEGIN, 1)[1].split(END, 1)[0]
+    found = set()
+    for line in block.splitlines():
+        parts = line.split("#", 1)[0].split()
+        if len(parts) >= 2 and parts[0] == "0.0.0.0":
+            host = parts[1][4:] if parts[1].startswith("www.") else parts[1]
+            if host:
+                found.add(host)
+    return found
+
+
+def needs_reapply() -> bool:
+    """True if enforcement is on but the hosts block no longer matches the
+    active list (something removed or changed Sentinel's block)."""
+    if not enforce_on():
+        return False
+    return set(active_blocklist()) != current_hosts_domains()
+
+
+def reapply():
+    """Put the active blocklist back into the hosts file (one admin prompt).
+    Used by the background agent when it finds the block was changed."""
+    from . import elevate
+
+    elevate.run("homenet", "hosts", json.dumps(active_blocklist()))
 
 
 def toggle_category(network_id: str, key: str, on: bool):
@@ -277,8 +351,10 @@ def elevated(action: str, args: list[str]):
 
     with open(HOSTS, "w", encoding="utf-8") as fh:
         fh.write(new)
-    subprocess.run(["ipconfig", "/flushdns"], capture_output=True,
-                   creationflags=0x08000000)
+    try:  # the block is already written; a flush hiccup must not fail the action
+        subprocess.run(["ipconfig", "/flushdns"], capture_output=True, creationflags=0x08000000)
+    except Exception:
+        pass
 
 
 def _strip_block(text: str) -> str:

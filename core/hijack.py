@@ -108,9 +108,21 @@ def _hosts_lines() -> list[str]:
         text = HOSTS.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
+    from . import homenet  # markers for Sentinel's own Home Network block
+
     lines = []
-    for line in text.splitlines():
-        line = line.split("#", 1)[0].strip()
+    in_sentinel = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped == homenet.BEGIN:
+            in_sentinel = True
+            continue
+        if stripped == homenet.END:
+            in_sentinel = False
+            continue
+        if in_sentinel:
+            continue  # Sentinel's own website blocks — managed by the Home Network page, not a hijack
+        line = raw.split("#", 1)[0].strip()
         if line:
             lines.append(" ".join(line.split()))
     return lines
