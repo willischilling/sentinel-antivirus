@@ -14,6 +14,9 @@ on:
       - 'homenet-manager/**'
       - '.github/workflows/build-homenet-exe.yml'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -42,3 +45,14 @@ jobs:
           name: HomeNetManager-exe
           path: homenet-manager/dist/HomeNetManager.exe
           if-no-files-found: error
+
+      - name: Publish the .exe to the dist-exe branch
+        shell: bash
+        run: |
+          cp homenet-manager/dist/HomeNetManager.exe ./HomeNetManager.exe
+          git checkout --orphan dist-exe
+          git reset
+          git add -f HomeNetManager.exe
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+              commit -m "Built HomeNetManager.exe"
+          git push -f origin dist-exe
