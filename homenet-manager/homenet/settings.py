@@ -35,3 +35,17 @@ def save(**changes):
     tmp = SETTINGS_PATH.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
     tmp.replace(SETTINGS_PATH)
+
+
+CRASH_LOG = data_dir() / "crash.log"
+
+
+def log_crash(where: str, text: str):
+    """Append a crash/error note so a silent (--noconsole) failure leaves a trace."""
+    import datetime
+    try:
+        with open(CRASH_LOG, "a", encoding="utf-8") as fh:
+            fh.write(f"\n===== {datetime.datetime.now().isoformat(timespec='seconds')} [{where}] =====\n")
+            fh.write(text.rstrip() + "\n")
+    except OSError:
+        pass

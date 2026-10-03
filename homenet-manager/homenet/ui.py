@@ -11,7 +11,9 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog, ttk
 
-from . import APP_NAME, control, dns, firewall, netscan, watcher
+import traceback
+
+from . import APP_NAME, control, dns, firewall, netscan, settings, watcher
 
 
 def _resource(rel: str) -> str:
@@ -51,6 +53,8 @@ class App(tk.Tk):
         except Exception:
             pass
         self._style()
+        # Never let a callback error kill the window silently; log it and carry on.
+        self.report_callback_exception = self._on_tk_error
         self.events: "queue.Queue" = queue.Queue()
         self.result: netscan.ScanResult | None = None
         self.busy = False          # a scan is running
@@ -95,14 +99,26 @@ class App(tk.Tk):
         self.body = self.scroll.inner
         self._render()
 
+    def _rerender(self):
+        """Rebuild the window after the current event finishes. Rebuilding from
+        inside a widget's own callback (which destroys that widget) can crash
+        Tk, so re-renders triggered by clicks are always deferred to idle."""
+        self.after_idle(self._render)
+
     def _render(self):
-        for child in self.body.winfo_children():
-            child.destroy()
-        self._access_card()
-        self._blocking_card()
-        self._devices_card()
-        self.status.configure(text=self.status_text)
-        self.scan_btn.configure(text="Scan again" if self.result else "Scan my network")
+        try:
+            for child in self.body.winfo_children():
+                child.destroy()
+            self._access_card()
+            self._blocking_card()
+            self._devices_card()
+            self.status.configure(text=self.status_text)
+            self.scan_btn.configure(text="Scan again" if self.result else "Scan my network")
+        except Exception:
+            settings.log_crash("render", traceback.format_exc())
+
+    def _on_tk_error(self, exc, val, tb):
+        settings.log_crash("tk-callback", "".join(traceback.format_exception(exc, val, tb)))
 
     # ---- access / PIN ----------------------------------------------------
     def _access_card(self):
@@ -129,7 +145,7 @@ class App(tk.Tk):
                 messagebox.showwarning(APP_NAME, "The PINs did not match. Nothing was changed.", parent=self)
                 return
             control.set_pin(pin.strip())
-            self._render()
+            self._rerender()
 
     def _change_pin(self):
         if self._ask_pin():
@@ -138,7 +154,7 @@ class App(tk.Tk):
     def _remove_pin(self):
         if self._ask_pin():
             control.clear_pin()
-            self._render()
+            self._rerender()
 
     def _ask_pin(self) -> bool:
         if not control.has_pin():
@@ -194,7 +210,7 @@ class App(tk.Tk):
             tk.Label(srow, text="⛔  " + domain, bg=CARD, fg=TEXT, font=("Segoe UI", 9)).pack(side="left")
             rm = tk.Label(srow, text="Remove", bg=CARD, fg=BAD, font=("Segoe UI", 9), cursor="hand2")
             rm.pack(side="right")
-            rm.bind("<Button-1>", lambda e, d=domain: (control.remove_site(nid, d), self._render()))
+            rm.bind("<Button-1>", lambda e, d=domain: (control.remove_site(nid, d), self._rerender()))
 
     def _checkrow(self, parent, label, on, command, sub=None):
         row = tk.Frame(parent, bg=CARD)
@@ -212,18 +228,18 @@ class App(tk.Tk):
 
     def _toggle_enforce(self):
         control.set_enforce(not control.enforce_on())
-        self._render()
+        self._rerender()
 
     def _toggle_cat(self, key):
         conf = control.net_config(self.result.network_id)[1]
         control.toggle_category(self.result.network_id, key, key not in set(conf.get("categories", [])))
-        self._render()
+        self._rerender()
 
     def _add_site(self):
         raw = simpledialog.askstring(APP_NAME, "Website to block (e.g. example.com):", parent=self)
         if raw:
             control.add_site(self.result.network_id, raw)
-            self._render()
+            self._rerender()
 
     def _apply_blocking(self):
         nid = self.result.network_id
@@ -306,21 +322,21 @@ class App(tk.Tk):
             control.set_paused(nid, dev.mac, want)
             self.status_text = ("Marked as paused (managed — applies at your router)." if want
                                 else "Marked as on (managed — applies at your router).")
-            self._render()
+            self._rerender()
 
     def _set_profile(self, dev, label):
         key = next((k for k, v in PROFILE_LABELS.items() if v == label), "other")
         control.set_profile(self.result.network_id, dev.mac, key)
         if key == "me":
             control.set_admin_device(self.result.network_id, dev.mac)
-        self._render()
+        self._rerender()
 
     def _rename(self, dev):
         current = control.device(self.result.network_id, dev.mac)["label"] or ""
         name = simpledialog.askstring(APP_NAME, "Name for this device:", initialvalue=current, parent=self)
         if name is not None:
             control.set_label(self.result.network_id, dev.mac, name)
-            self._render()
+            self._rerender()
 
     @staticmethod
     def _default_name(dev):
@@ -351,7 +367,7 @@ class App(tk.Tk):
             return
         self.action = label
         self.status_text = "Asking for administrator permission…"
-        self._render()
+        self._rerender()
 
         def run():
             try:
@@ -387,7 +403,12 @@ class App(tk.Tk):
                     self.status.configure(text=self.status_text)
         except queue.Empty:
             pass
-        self.after(150, self._pump)
+        except Exception:
+            settings.log_crash("pump", traceback.format_exc())
+        try:
+            self.after(150, self._pump)
+        except tk.TclError:
+            pass  # window is closing
 
     def _learn_admin(self, result):
         conf = control.net_config(result.network_id)[1]
@@ -438,7 +459,10 @@ class _ScrollArea(tk.Frame):
         self.canvas.bind_all("<MouseWheel>", self._wheel)
 
     def _wheel(self, event):
-        self.canvas.yview_scroll(int(-event.delta / 120), "units")
+        try:
+            self.canvas.yview_scroll(int(-event.delta / 120), "units")
+        except tk.TclError:
+            pass  # canvas gone (window closing) or no delta
 
 
 def run():
