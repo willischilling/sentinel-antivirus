@@ -1,0 +1,56 @@
+# Builds SentinelSetup.exe on Windows and publishes it as a GitHub release.
+# Runs when a version tag (v1.2.3) is pushed, or by hand from the Actions tab.
+# The release notes come from docs/release-notes/<tag>.md; the SHA-256 section is added here.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (for example v1.15.1). Created on the current commit if missing."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check the tag matches core/version.py
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path core/version.py -Pattern 'VERSION = "(.+)"').Matches[0].Groups[1].Value
+          if ("v$version" -ne $env:TAG) { throw "Tag $env:TAG doesn't match core/version.py ($version)" }
+          if (-not (Test-Path "docs/release-notes/$env:TAG.md")) { throw "Missing docs/release-notes/$env:TAG.md" }
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --prefer-binary -r requirements.txt pyinstaller
+
+      - name: Build the installer
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File build_installer.ps1
+
+      - name: Publish the release
+        shell: pwsh
+        run: |
+          $exe = "dist/SentinelSetup.exe"
+          $sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          $notes = (Get-Content "docs/release-notes/$env:TAG.md" -Raw).TrimEnd() + "`n`n## Verify your download`nSHA-256 of ``SentinelSetup.exe``:`n``````n$sha`n``````n"
+          Set-Content -Path notes.md -Value $notes -Encoding utf8
+          $version = $env:TAG.TrimStart("v")
+          gh release create $env:TAG $exe --title "Sentinel Antivirus $version" --notes-file notes.md --target $env:GITHUB_SHA
