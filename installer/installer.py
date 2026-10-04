@@ -1,7 +1,10 @@
 """Sentinel Antivirus setup wizard. Bundled by PyInstaller together with the
 pre-built app exe and uninstaller exe as payload data.
 """
+import ctypes
+import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -40,6 +43,12 @@ FONT = ("Segoe UI", 10)
 FONT_BOLD = ("Segoe UI Semibold", 10)
 FONT_SMALL = ("Segoe UI", 9)
 FONT_TITLE = ("Segoe UI Semibold", 17)
+OLD_SUFFIX = ".sentinel-old"  # a locked file from the previous version, moved aside so the new one fits
+CREATE_NO_WINDOW = 0x08000000
+
+
+class FileInUseError(RuntimeError):
+    """A file of the previous version couldn't be replaced, even after moving it aside."""
 
 
 def payload_dir() -> Path:
@@ -233,21 +242,24 @@ class SetupWizard(tk.Tk):
         # both the window and the background agent (same exe), then waits for
         # Windows to finish tearing them down; killed processes keep their exe
         # locked for a moment after taskkill returns.
-        for image in (APP_EXE_NAME, BROWSER_EXE_NAME):  # an open Sentinel Browser locks its files too
+        images = (APP_EXE_NAME, BROWSER_EXE_NAME)  # an open Sentinel Browser locks its files too
+        for image in images:
             subprocess.run(["taskkill", "/IM", image, "/F"], capture_output=True, check=False,
-                           creationflags=0x08000000)
-        self._wait_for_exit(APP_EXE_NAME)
-        self._wait_for_exit(BROWSER_EXE_NAME)
+                           creationflags=CREATE_NO_WINDOW)
+        for image in images:
+            self._wait_for_exit(image)
+        self._end_elevated_copies(images)
+        self._remove_old_files()
         app_exe = INSTALL_DIR / APP_SUBDIR / APP_EXE_NAME
         icon = INSTALL_DIR / ICON_NAME
         uninstall_exe = INSTALL_DIR / UNINSTALL_EXE_NAME
         try:
             self._status(t("setup_copying"))
             INSTALL_DIR.mkdir(parents=True, exist_ok=True)
-            self._copy_with_retry(lambda: shutil.copytree(app_src, INSTALL_DIR / APP_SUBDIR, dirs_exist_ok=True))
+            self._copy_tree(app_src, INSTALL_DIR / APP_SUBDIR)
             for name in (UNINSTALL_EXE_NAME, ICON_NAME):
                 if (src / name).is_file():
-                    self._copy_with_retry(lambda n=name: shutil.copy2(src / n, INSTALL_DIR / n))
+                    self._copy_file(src / name, INSTALL_DIR / name, time.monotonic() + 20)
             # Nothing may point at the app until it's verifiably in place.
             if not app_exe.is_file() or not uninstall_exe.is_file():
                 raise RuntimeError(t("setup_err_copy"))
@@ -296,7 +308,7 @@ class SetupWizard(tk.Tk):
         links = [START_MENU_DIR / f"{BROWSER_NAME}.lnk", desktop_dir() / f"{BROWSER_NAME}.lnk"]
         if self.browser_var.get() and (src / BROWSER_SUBDIR).is_dir():
             self._status(t("setup_browser_copying"))
-            self._copy_with_retry(lambda: shutil.copytree(src / BROWSER_SUBDIR, browser_dir, dirs_exist_ok=True))
+            self._copy_tree(src / BROWSER_SUBDIR, browser_dir)
             exe = browser_dir / BROWSER_EXE_NAME
             create_shortcut(links[0], exe, browser_dir, icon, description="Private browsing protected by Sentinel")
             if self.desktop_shortcut_var.get():
@@ -309,26 +321,85 @@ class SetupWizard(tk.Tk):
             shutil.rmtree(browser_dir, ignore_errors=True)
 
     @staticmethod
-    def _wait_for_exit(image_name, timeout=20.0):
+    def _is_running(image_name) -> bool:
+        out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image_name}", "/NH"],
+                             capture_output=True, text=True, creationflags=CREATE_NO_WINDOW).stdout
+        return image_name.lower() in out.lower()
+
+    def _wait_for_exit(self, image_name, timeout=20.0) -> bool:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {image_name}", "/NH"],
-                                 capture_output=True, text=True, creationflags=0x08000000).stdout
-            if image_name.lower() not in out.lower():
-                return
+            if not self._is_running(image_name):
+                return True
             time.sleep(0.5)
+        return False
+
+    def _end_elevated_copies(self, images):
+        """A Sentinel started as administrator (or a one-shot --elevated helper) survives our
+        taskkill, and keeps its files locked. Ending it takes the Windows admin prompt."""
+        running = [image for image in images if self._is_running(image)]
+        if not running or self.quiet:  # quiet update: nobody to ask; the copy below decides
+            return
+        if not messagebox.askokcancel(t("setup_title"), t("setup_admin_close")):
+            return
+        from core import elevate
+
+        args = subprocess.list2cmdline(["/F", *(part for image in running for part in ("/IM", image))])
+        info = elevate.SHELLEXECUTEINFOW(cbSize=ctypes.sizeof(elevate.SHELLEXECUTEINFOW),
+                                         fMask=elevate.SEE_MASK_NOCLOSEPROCESS, lpVerb="runas",
+                                         lpFile="taskkill.exe", lpParameters=args, nShow=0)
+        if not ctypes.windll.shell32.ShellExecuteExW(ctypes.byref(info)):
+            return  # declined: try the copy anyway, it may still work by moving files aside
+        ctypes.windll.kernel32.WaitForSingleObject(info.hProcess, 30_000)
+        ctypes.windll.kernel32.CloseHandle(info.hProcess)
+        for image in running:
+            self._wait_for_exit(image)
 
     @staticmethod
-    def _copy_with_retry(copy, timeout=20.0):
-        """Files of a just-closed Sentinel (or ones an antivirus is scanning) can
-        stay locked for a moment. copytree reports locked files as shutil.Error,
-        not PermissionError, so retry on any OSError until the timeout."""
+    def _remove_old_files():
+        """Deletes files an earlier install moved aside. Ones still in use stay for next time."""
+        for old in INSTALL_DIR.rglob(f"*{OLD_SUFFIX}"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+
+    def _copy_tree(self, src: Path, dst: Path, timeout=20.0):
+        """Like copytree(dirs_exist_ok=True), but each file goes through _copy_file,
+        so one locked file doesn't fail the whole copy."""
         deadline = time.monotonic() + timeout
+        dst.mkdir(parents=True, exist_ok=True)
+        for path in src.rglob("*"):
+            target = dst / path.relative_to(src)
+            if path.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+            else:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                self._copy_file(path, target, deadline)
+
+    @staticmethod
+    def _copy_file(src: Path, dst: Path, deadline: float):
+        """Copies one file over the old version. Files of a just-closed Sentinel (or ones an
+        antivirus is scanning) can stay locked. Windows won't let a locked file be overwritten,
+        but usually lets it be renamed, so the old one is moved aside (deleted on the next
+        install) and the new one takes its place. Otherwise retry until the deadline."""
+        moved_aside = False
         while True:
             try:
-                return copy()
-            except (OSError, shutil.Error):
+                shutil.copy2(src, dst)
+                return
+            except OSError as e:
+                if isinstance(e, PermissionError) and not moved_aside and dst.exists():
+                    try:
+                        os.chmod(dst, stat.S_IWRITE)  # a read-only file can't be overwritten either
+                        os.replace(dst, dst.with_name(f"{dst.name}.{time.time_ns()}{OLD_SUFFIX}"))
+                        moved_aside = True
+                        continue
+                    except OSError:
+                        pass
                 if time.monotonic() >= deadline:
+                    if isinstance(e, PermissionError):
+                        raise FileInUseError(t("setup_err_locked", file=dst.name)) from e
                     raise
                 time.sleep(1)
 
