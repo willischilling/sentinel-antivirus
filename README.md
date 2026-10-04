@@ -53,6 +53,7 @@ This runs as a separate background process (`Sentinel.exe --agent`), so it keeps
 | Program protection | Checks each new program within about a second of it starting, plus a background sweep of everything already running. |
 | Startup protection | Alerts when a program adds itself to the registry Run keys, a Startup folder, or Task Scheduler. Programs with a valid Microsoft signature (Edge, Windows components) are logged without a popup, except launchers like PowerShell, cmd and rundll32, which malware often hides behind. |
 | Ransomware protection | Watches Documents, Desktop, Pictures, Music, Videos and Downloads for many files suddenly turning into unreadable data or being renamed to strange extensions. The optional **Ransomware shield** (below) goes further and blocks changes before they happen. |
+| Stealer guard | Pauses new, unsigned programs that open your saved browser passwords and cookies, Discord, Roblox, Steam or Minecraft logins, Telegram or crypto wallets, and watches Temp and AppData for stolen data being collected. See [Stealer guard](#stealer-guard). |
 | USB drive protection | Scans USB drives and SD cards as soon as they're plugged in, at background priority (or asks first, or is off). Threats get the usual popup, and a clean drive gets a short "no threats" note. |
 
 **Alerts.** These appear as popups in the bottom-right corner, with buttons to act on them:
@@ -75,6 +76,16 @@ Nothing is ended or deleted without a click.
 **Ransomware alerts** name the program most likely responsible: the process writing the most to disk right now. The alert says "Cause" instead of "Likely cause" when that process also has files open in the affected folder.
 
 **Threat database updates.** The fingerprint list and YARA rules update automatically every 6 hours. The first download is about 45 MB; later updates take a few seconds.
+
+### Stealer guard
+Password stealers (RedLine, Lumma, fake "Roblox executors", "free Nitro" generators, malicious Minecraft mods) grab saved logins within seconds of starting. Fingerprints only catch the ones already known, so Stealer guard watches for what they all have to do:
+
+- **Programs opening your logins.** Every second, programs started in the last 15 minutes that aren't signed by a publisher, plus script runners that run whatever they're given (Python, PowerShell, cmd, Node, Java, mshta...), have their open files checked against where saved logins live: browser passwords, cookies and the key that unlocks them (`Login Data`, `Cookies`, `Local State`; Chrome, Edge, Brave, Opera, Firefox and others), browser wallet extensions (MetaMask, Phantom...), Discord's token storage, Roblox's `LocalStorage`, Steam's `loginusers.vdf` and `ssfn` files, Minecraft launcher accounts, Telegram's `tdata` and desktop wallets (Exodus, Electrum, Atomic...).
+- **Stolen data being collected.** New files in Temp and AppData, where stealers gather what they took before sending it, are checked for copies of browser password or cookie databases outside the browser, Discord tokens (verified by decoding the account ID at the start), Roblox `.ROBLOSECURITY` cookies, and lists of passwords or cookies. The browsers' and apps' own databases are recognized by the profile files next to them and never count.
+- **What happens:** a program caught with the files open is **paused** at once, before it can finish, and a popup offers **End and quarantine** (or **End program** for a script runner) or **Allow**. Closing the popup lets it carry on. The recovery checklist opens too, since some data may already be gone; choosing **Allow** closes it again when nothing has been ticked. When the program had already closed the stolen-data file, the popup names the newest unsigned program as the *probable* cause and doesn't pause it.
+- Browsers, Discord, Steam and other signed apps reading their own data never count, and allowed programs are listed on the Stealer guard page (Tools tab) with the last warnings and the switch. Nothing about these files is stored or sent.
+
+It can't see programs running as administrator, and a stealer that's fast enough can finish before it's paused; it's a second line behind the fingerprint and YARA checks.
 
 ### Ask Sentinel (scam checker)
 A chat tab for weird messages, sketchy links and security questions. It works in two layers:
@@ -284,6 +295,7 @@ app_updates_card.py, core/app_updates.py ── Out-of-date apps via winget
 core/schedule.py ── Scheduled quick scans
 security_page.py, core/security_score.py, core/pwned.py ── Security Check: score, fixes, password leak check
 core/usb.py, core/wifi.py ── USB drive detection; current Wi-Fi network (for automatic VPN)
+stealer_page.py, core/stealer_guard.py, monitor/stealer_watcher.py ── Stealer guard: page, checks, watching
 theme.py ── dark and light palettes, swapped live
 ```
 

@@ -109,6 +109,8 @@ class ReportPage(tk.Frame):
              ", ".join(data.get("camera_mic") or [])),
             ("web", C.WARN if data.get("link_warnings") else C.GOOD,
              t("report_links", n=number(data.get("link_warnings") or 0)), ""),
+            ("key", C.BAD if data.get("stealer_warnings") else C.GOOD,
+             t("report_stealer", n=number(data.get("stealer_warnings") or 0)), ""),
             ("web", C.WARN if data.get("browser_items") else C.GOOD,
              t("report_browser_bad", n=number(data["browser_items"])) if data.get("browser_items")
              else t("report_browser_ok"), ""),

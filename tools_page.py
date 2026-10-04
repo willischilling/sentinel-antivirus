@@ -64,6 +64,7 @@ class ToolsPage(tk.Frame):
             ("tools_sec_accounts", [
                 ("key", t("pw_title"), t("tools_pw_desc"), (t("tools_pw_status"), C.TEXT_MUTED), "security"),
                 ("lock", t("breach_title"), t("tools_breach_desc"), self._breach_status(), "breach"),
+                ("key", t("stealer_page_title"), t("tools_stealer_desc"), self._stealer_status(), "stealer"),
                 ("health", t("rec_title"), t("tools_rec_desc"), self._rec_status(), "recovery"),
             ]),
             ("tools_sec_privacy", [
@@ -157,6 +158,15 @@ class ToolsPage(tk.Frame):
         if apps is None:
             return t("tools_checking"), C.TEXT_MUTED
         return t("startup_count", on=number(sum(1 for a in apps if a.enabled)), total=number(len(apps))), C.ACCENT
+
+    @staticmethod
+    def _stealer_status():
+        from core import stealer_guard
+
+        if not stealer_guard.enabled():
+            return t("stealer_off"), C.TEXT_MUTED
+        warned = len(stealer_guard.recent())
+        return (t("tools_stealer_warned", n=number(warned)), C.BAD) if warned else (t("tools_stealer_on"), C.GOOD)
 
     @staticmethod
     def _sandbox_status():

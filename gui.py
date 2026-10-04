@@ -45,12 +45,13 @@ from shred_page import ShredPage
 from breach_page import BreachPage, new_state as new_breach_state
 from startup_page import StartupPage, new_state as new_startup_state
 from linkguard_page import LinkGuardPage
+from stealer_page import StealerPage
 from sandbox_page import SandboxPage, open_in_sandbox
 from report_page import ReportPage
 
 # Pages opened from another one: the sidebar keeps that one highlighted.
 PARENT_PAGE = {"security": "dashboard", "recovery": "tools", "extensions": "tools", "cleaner": "tools",
-               "shield": "protection", "privacy": "tools", "network": "tools", "guard": "tools", "shred": "tools", "breach": "tools", "startup": "tools", "linkguard": "tools",
+               "shield": "protection", "privacy": "tools", "network": "tools", "guard": "tools", "shred": "tools", "breach": "tools", "startup": "tools", "linkguard": "tools", "stealer": "tools",
                "sandbox": "tools", "report": "tools"}
 
 
@@ -362,6 +363,7 @@ class App(tk.Tk):
         self.pages["startup"] = self.startup_page
         self.linkguard_page = LinkGuardPage(self.content, self)
         self.pages["linkguard"] = self.linkguard_page
+        self.pages["stealer"] = StealerPage(self.content, self)
         self.sandbox_page = SandboxPage(self.content, self)
         self.pages["sandbox"] = self.sandbox_page
         self.report_page = ReportPage(self.content, self)
@@ -410,7 +412,7 @@ class App(tk.Tk):
             self.guard_page.refresh()
         elif key == "startup":
             self.startup_page.refresh()
-        elif key in ("linkguard", "sandbox", "report"):
+        elif key in ("linkguard", "stealer", "sandbox", "report"):
             self.pages[key].refresh()
 
     # ---------------------------------------------------------- dashboard --

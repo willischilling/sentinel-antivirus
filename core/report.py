@@ -61,6 +61,8 @@ def build(protection_on: bool = True) -> dict:
         report["camera_mic"] = []
     report["link_warnings"] = sum(1 for a in settings.load().get("link_alerts") or []
                                   if datetime.fromisoformat(a["time"]) >= start)
+    report["stealer_warnings"] = sum(1 for a in settings.load().get("stealer_alerts") or []
+                                     if datetime.fromisoformat(a["time"]) >= start)
     try:
         from . import hijack
 

@@ -17,12 +17,12 @@ import launcher
 import single_instance
 from core import (
     activity, app_update, authenticode, context_menu, database, linkguard, report, scan_requests, elevate, gamemode, hijack, i18n, netscan, paths, privacy,
-    quarantine, recovery, scanner, schedule, settings, signatures, threat_intel, usb, vpn, wifi,
+    quarantine, recovery, scanner, schedule, settings, signatures, stealer_guard, threat_intel, usb, vpn, wifi,
 )
 from core.version import VERSION
 from core.i18n import number, t
 from gui import clip, configure_style, default_watch_path
-from monitor import file_watcher, process_watcher, ransomware_watcher, startup_watcher
+from monitor import file_watcher, process_watcher, ransomware_watcher, startup_watcher, stealer_watcher
 import theme as C
 from toast import ToastManager
 
@@ -98,6 +98,8 @@ class Agent(tk.Tk):
         personal = ransomware_watcher.default_folders()
         self.ransom_observer = ransomware_watcher.watch(
             personal, lambda a: self.events.put(("ransomware", a))) if personal else None
+        self.stealer_watcher = stealer_watcher.StealerWatcher(
+            lambda a: self.events.put(("stealer", a)), self.proc_stop_flag).start()
 
         self.tray = self._start_tray()
         activity.log(t("log_started", folder=watch_path), "muted")
@@ -542,6 +544,8 @@ class Agent(tk.Tk):
                     self._on_wifi(*payload)
                 elif kind == "ransomware":
                     self._on_ransomware_alert(payload)
+                elif kind == "stealer":
+                    self._on_stealer(payload)
                 elif kind == "privacy":
                     self._on_privacy(*payload)
                 elif kind == "hijack":
@@ -619,6 +623,7 @@ class Agent(tk.Tk):
             if observer:
                 observer.stop()
                 observer.join()
+        self.stealer_watcher.stop()
         self.proc_stop_flag[0] = True  # also stops the process and startup watchers
         if self.tray:
             self.tray.stop()
@@ -836,6 +841,88 @@ class Agent(tk.Tk):
             detail=detail, location=alert.folder, accent=C.BAD, actions=actions,
             on_error=self._log_failure(alert.folder),
         )
+        self._beep(True)
+
+    # ------------------------------------------------------- stealer guard --
+    def _on_stealer(self, alert):
+        """A program opened saved logins, or stolen-looking data turned up. The program was
+        paused when it was caught; nothing else happens without a click."""
+        what = ", ".join(t(f"stealer_cat_{c}") for c in stealer_guard.CATEGORIES if c in alert.categories)
+        stealer_guard.remember(alert.name, alert.exe, alert.kind, alert.categories, alert.file)
+        label = f"Stealer behavior: {alert.name}" if alert.name else "Stealer behavior"
+        recovery.record(label)  # by the time anyone reads the popup, the data may be gone already
+        if alert.pid is None:
+            self._on_stolen_file(alert, what)
+            return
+        activity.log(t("log_stealer", name=alert.name, what=what, path=alert.exe), "threat")
+        exe = Path(alert.exe)
+        state = {"decided": False}
+
+        def end_program():
+            state["decided"] = True
+            if not process_watcher.kill_process(alert.pid, alert.exe):
+                raise RuntimeError(t("err_admin_blocked"))
+            activity.log(t("log_ended", pid=alert.pid, name=alert.name), "muted")
+            return t("msg_program_ended")
+
+        def end_and_quarantine():
+            end_program()
+            dest = quarantine.quarantine_file(exe, label)
+            activity.log(t("log_quarantined", path=exe, dest=dest.name), "muted")
+            return t("msg_program_ended_quarantined")
+
+        def allow():
+            state["decided"] = True
+            self._resume(alert)
+            if not alert.script_host:  # trusting python.exe would trust every script
+                stealer_guard.allow(alert.exe)
+            data = recovery.incident()
+            if data and data.get("threat") == label and not data.get("done"):
+                recovery.resolve()  # a false alarm: no checklist needed
+            activity.log(t("log_stealer_allowed", name=alert.name), "muted")
+            return t("stealer_allowed_msg", name=alert.name)
+
+        if alert.kind == "reading":
+            detail = t("stealer_reading", what=what)
+        else:
+            detail = t("stealer_copied_likely" if alert.likely else "stealer_copied", what=what,
+                       file=Path(alert.file).name)
+        if alert.paused:
+            detail += " " + t("stealer_paused")
+        actions = [(t("btn_end_program"), "Danger.TButton", end_program)] if alert.script_host else [
+            (t("btn_quarantine"), "Danger.TButton", end_and_quarantine)]
+        actions.append((t("stealer_allow"), "Ghost.TButton", allow))
+        toast = self.toasts.show(
+            title=t("stealer_title"), filename=alert.name, detail=detail, location=str(exe.parent), accent=C.BAD,
+            actions=actions, on_error=self._log_failure(alert.name))
+        # Closed with the X: the person has seen it and lets the program carry on.
+        toast.bind("<Destroy>", lambda e: self._resume(alert) if e.widget is toast and not state["decided"]
+                   else None)
+        self._beep(True)
+
+    @staticmethod
+    def _resume(alert):
+        if not alert.paused:
+            return
+        try:
+            psutil.Process(alert.pid).resume()
+        except psutil.Error:
+            pass
+
+    def _on_stolen_file(self, alert, what):
+        path = Path(alert.file)
+        activity.log(t("log_stealer_file", what=what, path=path), "threat")
+
+        def delete():
+            path.unlink(missing_ok=True)
+            activity.log(t("log_deleted", path=path), "muted")
+            return t("msg_file_deleted")
+
+        self.toasts.show(
+            title=t("stealer_title"), filename=path.name, detail=t("stealer_file_found", what=what),
+            location=str(path.parent), accent=C.BAD,
+            actions=[(t("btn_delete"), "Danger.TButton", delete), (t("btn_ignore"), "Ghost.TButton", lambda: None)],
+            on_error=self._log_failure(path))
         self._beep(True)
 
     @staticmethod
